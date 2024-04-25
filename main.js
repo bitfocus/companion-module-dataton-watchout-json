@@ -118,7 +118,7 @@ class ModuleInstance extends InstanceBase {
 			{
 				type: 'textinput',
 				id: 'host',
-				label: 'Producer IP',
+				label: 'Director IP',
 				width: 8,
 				regex: Regex.IP,
 			},
