@@ -49,6 +49,30 @@ const getActions = (base) => {
 			fetch(`${base.baseUrl}/${action.options.action}/${action.options.timeline}`, { method: 'POST' })
 		},
 	}
+	actions['timeline_toggle'] = {
+		name: 'Timeline Toggle',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Timeline',
+				id: 'timeline',
+				default: '0',
+				choices: base.CHOICES_TIMELINES,
+			},
+		],
+		callback: (action) => {
+			base.playbackStatus.timelines.forEach(timeline => {
+				console.log('timeline', timeline)
+				if(timeline.id === action.options.timeline && timeline.running === false){
+					action.options.action = 'play'
+				} else{	
+					action.options.action = 'pause'
+				}
+			})
+			base.log('debug', `API send: ${base.baseUrl}/${action.options.action}/${action.options.timeline}`)
+			fetch(`${base.baseUrl}/${action.options.action}/${action.options.timeline}`, { method: 'POST' })
+		},
+	}
 	/*** 
     format "/v0/jump-to-time/{tl_id}?time={time}&state={state}"
     {tl_id} is timeline id

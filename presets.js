@@ -194,6 +194,58 @@ const getPresets = (base) => {
 					},
 				], // You can add some presets from your module here
 			}
+			presets[`timeline_toggle_control_id${key}`] = {
+				type: 'button', // This must be 'button' for now
+				category: 'Toggle', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
+				name: `Toggle timeline`, // A name for the preset. Shown to the user when they hover over it
+				style: {
+					// This is the minimal set of style properties you must define
+					text: `Toggle $(watchout-json:${key})`, // You can use variables from your module here
+					size: '14px',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(0, 0, 0),
+				},
+				steps: [
+					{
+						down: [
+							{
+								// add an action on down press
+								actionId: 'timeline_toggle',
+								options: {
+									timeline: key,
+								},
+							},
+						],
+						up: [],
+					},
+				],
+				feedbacks: [
+					{
+						feedbackId: 'timeLineState',
+						options: {
+							timeline: key,
+							running: 'true',
+						},
+						style: {
+							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
+							color: combineRgb(255, 255, 255),
+							bgcolor: combineRgb(0, 204, 0),
+						},
+					},
+					{
+						feedbackId: 'timeLineState',
+						options: {
+							timeline: key,
+							running: 'false',
+						},
+						style: {
+							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
+							color: combineRgb(0, 0, 0),
+							bgcolor: combineRgb(255, 255, 0),
+						},
+					},
+				], // You can add some presets from your module here
+			}
 			presets[`timeline_stop_control_id${key}`] = {
 				type: 'button', // This must be 'button' for now
 				category: 'Stop', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
