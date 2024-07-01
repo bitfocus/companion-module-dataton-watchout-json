@@ -6,7 +6,6 @@ const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fet
 const UpdateFeedbacks = require('./feedbacks.js')
 const { createVariableDefinitions, setDynamicVariables } = require('./variables.js')
 
-
 class ModuleInstance extends InstanceBase {
 	// Some basic objects and variables
 	show
@@ -16,6 +15,7 @@ class ModuleInstance extends InstanceBase {
 	CHOICES_CUES
 	pollingTimeLineState
 	pollingShowInfo
+	connected = false
 
 	constructor(internal) {
 		super(internal)
@@ -31,14 +31,12 @@ class ModuleInstance extends InstanceBase {
 			this.baseUrl = `http://${this.config.host}:3019/v0`
 
 			// Get base show info to load timelines
-			await this.getShowInfo()
-			this.updateStatus(InstanceStatus.Ok)
-			this.updateActions() // export actions
-			this.updateFeedbacks() // export feedbacks
-			this.updatePresets() // export presets
 			createVariableDefinitions(this) // export variable definitions
-			this.startPollingTimeLineState()
-			this.startPollingShowInfo()
+			await this.getShowInfo()
+			if (this.connected) {
+				this.startPollingTimeLineState()
+				this.startPollingShowInfo()
+			}
 		}
 	}
 	/**
@@ -87,6 +85,8 @@ class ModuleInstance extends InstanceBase {
 			const response = await fetch(`${this.baseUrl}/show`, { method: 'GET' })
 			let resultData = await response.json()
 			this.show = resultData.show
+			this.updateStatus(InstanceStatus.Ok)
+			createVariableDefinitions(this) // export variable definitions
 			this.setVariableValues({
 				director: this.show.hosts.director,
 				asset_manager: this.show.hosts.asset_manager,
@@ -94,8 +94,10 @@ class ModuleInstance extends InstanceBase {
 			this.updateActions()
 			this.updateVariables()
 			this.updatePresets()
+			this.connected = true
 		} catch (e) {
 			this.log('error', `API ShowInfo Request failed (${e.message})`)
+			this.connected = false
 			this.updateStatus(InstanceStatus.UnknownError, e.code)
 		}
 	}
@@ -108,8 +110,15 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	async configUpdated(config) {
+		clearInterval(this.pollingTimeLineState)
+		clearInterval(this.pollingShowInfo)
 		this.config = config
 		this.baseUrl = `http://${this.config.host}:3019/v0`
+		await this.getShowInfo()
+		if (this.connected) {
+			this.startPollingTimeLineState()
+			this.startPollingShowInfo()
+		}
 	}
 
 	// Return config fields for web config
@@ -128,7 +137,7 @@ class ModuleInstance extends InstanceBase {
 	updateActions() {
 		this.setActionDefinitions(getActions(this))
 	}
-	
+
 	updatePresets() {
 		this.setPresetDefinitions(getPresets(this))
 	}

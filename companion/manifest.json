@@ -3,7 +3,7 @@
 	"name": "dataton-watchout-json",
 	"shortname": "watchout-json",
 	"description": "Watchout module for Companion using json",
-	"version": "1.0.0",
+	"version": "1.2.0",
 	"license": "MIT",
 	"repository": "git+https://github.com/bitfocus/companion-module-dataton-watchout-json.git",
 	"bugs": "https://github.com/bitfocus/companion-module-dataton-watchout-json/issues",

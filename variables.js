@@ -1,4 +1,14 @@
 const createVariableDefinitions = (base) => {
+	
+	base.setVariableDefinitions([
+		{ variableId: 'heartbeat', name: 'Heartbeat to Watchout' },
+		{ variableId: 'asset_manager', name: 'Asset Manager' },
+		{ variableId: 'director', name: 'Director' },
+		// ...dynamicVariables,
+	])
+}
+
+const setDynamicVariables = (base) => {
 	dynamicVariables = []
 	for (const key in base.show.timelines) {
 		if (Object.hasOwnProperty.call(base.show.timelines, key)) {
@@ -12,9 +22,6 @@ const createVariableDefinitions = (base) => {
 		{ variableId: 'director', name: 'Director' },
 		...dynamicVariables,
 	])
-}
-
-const setDynamicVariables = (base) => {
 	valuesVariables = {}
 	for (const key in base.show.timelines) {
 		if (Object.hasOwnProperty.call(base.show.timelines, key)) {
