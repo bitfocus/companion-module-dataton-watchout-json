@@ -32,7 +32,7 @@ module.exports = async function (base) {
 			callback: (feedback) => {
 				if (base.playbackStatus && base.playbackStatus.timelines) {
 					return base.playbackStatus.timelines.some((timeline) => {
-						return timeline.id === feedback.options.timeline && timeline.running.toString() === feedback.options.running;
+						return timeline.id.toString() === feedback.options.timeline && timeline.running.toString() === feedback.options.running;
 					});
 				} else {
 					return false

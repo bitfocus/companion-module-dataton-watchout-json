@@ -5,7 +5,11 @@ const { getPresets } = require('./presets')
 const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args))
 const UpdateFeedbacks = require('./feedbacks.js')
 const { createVariableDefinitions, setDynamicVariables } = require('./variables.js')
+const { createParser } = require('eventsource-parser')
 
+/**
+ * Main module class
+ */
 class ModuleInstance extends InstanceBase {
 	// Some basic objects and variables
 	show
@@ -25,18 +29,84 @@ class ModuleInstance extends InstanceBase {
 		return Object.keys(obj).length === 0
 	}
 
+	/**
+	 * initialisation of the module
+	 * @param {*} config
+	 */
 	async init(config) {
 		this.config = config
 		if (this.config.host !== undefined && this.config.host !== '') {
 			this.baseUrl = `http://${this.config.host}:3019/v0`
+			this.sseUrl = `${this.baseUrl}/sse`
 
 			// Get base show info to load timelines
 			createVariableDefinitions(this) // export variable definitions
 			await this.getShowInfo()
 			if (this.connected) {
-				this.startPollingTimeLineState()
+				this.getTimeLineState()
+				this.readSSEStream(this.sseUrl).catch(console.error)
+				// this.startPollingTimeLineState()
 				this.startPollingShowInfo()
 			}
+		}
+		this.updateFeedbacks()
+	}
+
+	/**
+	 * Get a readable stream from a SSE endpoint
+	 * @param {*} url
+	 * @returns Readable Stream
+	 */
+	getReadableStream = async (url) => {
+		const response = await fetch(url)
+		if (!response.ok) {
+			throw new Error(`HTTP error! status: ${response.status}`)
+		}
+		return response.body // ReadableStream
+	}
+
+	/**
+	 * handle sse parse events
+	 * @param {*} event
+	 */
+	onParse = (event) => {
+		switch (event.type) {
+			case 'event':
+				try {
+					let parsedData = JSON.parse(event.data)
+					if (parsedData.type === 'playbackState') {
+						// update heartbeat variable
+						let date = new Date(parsedData.clockTime) // create Date object
+						this.setVariableValues({
+							heartbeat: date.toString(),
+						})
+						this.playbackStatus = parsedData
+						this.checkFeedbacks('timeLineState')
+					}
+				} catch (error) {
+					console.error('error parsing data: %s', error)
+				}
+				break
+			case 'reconnect-interval':
+				console.log('reconnect-interval: %s', event.data)
+				break
+
+			default:
+				console.log('no case for: %s', event.type)
+				break
+		}
+	}
+
+	/**
+	 * Main function to setup the SSE stream and parser
+	 * @param {*} url
+	 */
+	readSSEStream = async (url) => {
+		const parser = createParser(this.onParse)
+		const sseStream = await this.getReadableStream(url)
+
+		for await (const chunk of sseStream) {
+			parser.feed(chunk.toString())
 		}
 	}
 	/**
@@ -54,7 +124,7 @@ class ModuleInstance extends InstanceBase {
 
 		this.pollingShowInfo = setInterval(async () => {
 			await this.getShowInfo()
-		}, 5000)
+		}, 15000)
 	}
 
 	/**
@@ -73,6 +143,7 @@ class ModuleInstance extends InstanceBase {
 			this.checkFeedbacks('timeLineState')
 		} catch (e) {
 			this.log('error', `API heartbeat Request failed (${e.message})`)
+			this.connected = false
 			this.updateStatus(InstanceStatus.UnknownError, e.code)
 		}
 	}
@@ -102,21 +173,31 @@ class ModuleInstance extends InstanceBase {
 		}
 	}
 
-	// When module gets deleted
+	/**
+	 * When the module is destroyed
+	 */
 	async destroy() {
 		this.log('debug', 'destroy')
+		this.connected = false
+		parser.reset()
 		clearInterval(this.pollingTimeLineState)
 		clearInterval(this.pollingShowInfo)
 	}
-
+	/**
+	 * When the config is updated
+	 * @param {*} config
+	 */
 	async configUpdated(config) {
+		parser.reset()
 		clearInterval(this.pollingTimeLineState)
 		clearInterval(this.pollingShowInfo)
 		this.config = config
 		this.baseUrl = `http://${this.config.host}:3019/v0`
+		this.sseUrl = `${this.baseUrl}/sse`
 		await this.getShowInfo()
 		if (this.connected) {
-			this.startPollingTimeLineState()
+			readSSEStream(this.sseUrl).catch(console.error)
+			// this.startPollingTimeLineState()
 			this.startPollingShowInfo()
 		}
 	}
@@ -134,18 +215,27 @@ class ModuleInstance extends InstanceBase {
 		]
 	}
 
+	/**
+	 * Handle actions
+	 */
 	updateActions() {
 		this.setActionDefinitions(getActions(this))
 	}
-
+	/**
+	 * Handle presets
+	 */
 	updatePresets() {
 		this.setPresetDefinitions(getPresets(this))
 	}
-
+	/**
+	 * Handle feedbacks
+	 */
 	updateFeedbacks() {
 		UpdateFeedbacks(this)
 	}
-
+	/**
+	 * Handle variables
+	 */
 	updateVariables() {
 		setDynamicVariables(this)
 	}
