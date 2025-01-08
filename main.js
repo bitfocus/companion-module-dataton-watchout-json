@@ -7,9 +7,34 @@ const UpdateFeedbacks = require('./feedbacks.js')
 const { createVariableDefinitions, setDynamicVariables } = require('./variables.js')
 const { createParser } = require('eventsource-parser')
 
-/**
- * Main module class
- */
+
+// Function to simulate getting a readable stream from an SSE endpoint
+const getSomeReadableStream = async (url) => {
+	const response = await fetch(url)
+	if (!response.ok) {
+		throw new Error(`Failed to connect to ${url}`)
+	}
+	return response.body // This is the Node.js readable stream
+}
+
+// Function to handle parsed events
+const onParse = (event) => {
+	if (event.type === 'event') {
+		console.log('data: %s', event.data)
+	} else if (event.type === 'reconnect-interval') {
+		console.log('We should set reconnect interval to %d milliseconds', event.value)
+	}
+}
+// Main function to set up the SSE stream and parser
+const readSSEStream = async (url) => {
+	const parser = createParser(onParse)
+	const sseStream = await getSomeReadableStream(url)
+
+	for await (const chunk of sseStream) {
+		parser.feed(chunk.toString())
+	}
+}
+
 class ModuleInstance extends InstanceBase {
 	// Some basic objects and variables
 	show
@@ -41,6 +66,7 @@ class ModuleInstance extends InstanceBase {
 
 			// Get base show info to load timelines
 			createVariableDefinitions(this) // export variable definitions
+
 			await this.getShowInfo()
 			if (this.connected) {
 				this.getTimeLineState()
@@ -107,6 +133,11 @@ class ModuleInstance extends InstanceBase {
 
 		for await (const chunk of sseStream) {
 			parser.feed(chunk.toString())
+
+			this.startPollingTimeLineState()
+			this.startPollingShowInfo()
+			readSSEStream(this.sseUrl).catch(console.error)
+
 		}
 	}
 	/**
@@ -178,7 +209,9 @@ class ModuleInstance extends InstanceBase {
 	 */
 	async destroy() {
 		this.log('debug', 'destroy')
+
 		this.connected = false
+
 		parser.reset()
 		clearInterval(this.pollingTimeLineState)
 		clearInterval(this.pollingShowInfo)
@@ -221,9 +254,11 @@ class ModuleInstance extends InstanceBase {
 	updateActions() {
 		this.setActionDefinitions(getActions(this))
 	}
+
 	/**
 	 * Handle presets
 	 */
+
 	updatePresets() {
 		this.setPresetDefinitions(getPresets(this))
 	}
