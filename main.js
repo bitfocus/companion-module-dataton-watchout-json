@@ -7,7 +7,6 @@ const UpdateFeedbacks = require('./feedbacks.js')
 const { createVariableDefinitions, setDynamicVariables } = require('./variables.js')
 const { createParser } = require('eventsource-parser')
 
-
 // Function to simulate getting a readable stream from an SSE endpoint
 const getSomeReadableStream = async (url) => {
 	const response = await fetch(url)
@@ -17,32 +16,17 @@ const getSomeReadableStream = async (url) => {
 	return response.body // This is the Node.js readable stream
 }
 
-// Function to handle parsed events
-const onParse = (event) => {
-	if (event.type === 'event') {
-		console.log('data: %s', event.data)
-	} else if (event.type === 'reconnect-interval') {
-		console.log('We should set reconnect interval to %d milliseconds', event.value)
-	}
-}
-// Main function to set up the SSE stream and parser
-const readSSEStream = async (url) => {
-	const parser = createParser(onParse)
-	const sseStream = await getSomeReadableStream(url)
-
-	for await (const chunk of sseStream) {
-		parser.feed(chunk.toString())
-	}
-}
-
 class ModuleInstance extends InstanceBase {
 	// Some basic objects and variables
 	show
+	snapshots
 	baseUrl
+	sseUrl
 	playbackStatus
+	mediaPresetsActive
 	CHOICES_TIMELINES
 	CHOICES_CUES
-	pollingTimeLineState
+	CHOICES_SNAPSHOTS
 	pollingShowInfo
 	connected = false
 
@@ -55,27 +39,28 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
-	 * initialisation of the module
+	 * initialization of the module
 	 * @param {*} config
 	 */
 	async init(config) {
 		this.config = config
+		this.updateStatus(InstanceStatus.Ok, 'Initializing...')
 		if (this.config.host !== undefined && this.config.host !== '') {
 			this.baseUrl = `http://${this.config.host}:3019/v0`
-			this.sseUrl = `${this.baseUrl}/sse`
+			this.sseUrl = `http://${this.config.host}:3019/v1/sse`
 
 			// Get base show info to load timelines
 			createVariableDefinitions(this) // export variable definitions
 
 			await this.getShowInfo()
+			this.updateStatus(InstanceStatus.Ok, 'Connected')	
 			if (this.connected) {
-				this.getTimeLineState()
+				console.log('this.connected = true')
 				this.readSSEStream(this.sseUrl).catch(console.error)
-				// this.startPollingTimeLineState()
-				this.startPollingShowInfo()
+				// this.startPollingShowInfo()
 			}
+			this.updateFeedbacks()
 		}
-		this.updateFeedbacks()
 	}
 
 	/**
@@ -90,72 +75,97 @@ class ModuleInstance extends InstanceBase {
 		}
 		return response.body // ReadableStream
 	}
-
+	// // Function to handle parsed events
+	// const onParse = (event) => {
+	// 	if (event.type === 'event') {
+	// 		console.log('data: %s', event.data)
+	// 	} else if (event.type === 'reconnect-interval') {
+	// 		console.log('We should set reconnect interval to %d milliseconds', event.value)
+	// 	}
+	// }
 	/**
 	 * handle sse parse events
 	 * @param {*} event
 	 */
 	onParse = (event) => {
-		switch (event.type) {
-			case 'event':
-				try {
-					let parsedData = JSON.parse(event.data)
-					if (parsedData.type === 'playbackState') {
+		if (event.type === 'event') {
+			try {
+				const collectedData = JSON.parse(event.data)
+				// console.log('collectedData', collectedData)
+				switch (collectedData.kind) {
+					case 'playbackState':
 						// update heartbeat variable
-						let date = new Date(parsedData.clockTime) // create Date object
+						let date = new Date(collectedData.value.clockTime) // create Date object
+						console.log('clockTime', date.toString())
 						this.setVariableValues({
 							heartbeat: date.toString(),
 						})
-						this.playbackStatus = parsedData
+						this.playbackStatus = collectedData
 						this.checkFeedbacks('timeLineState')
-					}
-				} catch (error) {
-					console.error('error parsing data: %s', error)
+						break
+					case 'reconnect-interval':
+						console.log('reconnect-interval: %s', collectedData)
+						break
+					case 'showRevision':
+						// console.log('Show Revision', collectedData.value.revision)
+						break
+					case 'inputs':
+						// console.log('Inputs', collectedData.value.inputs)
+						break
+					case 'cueVisibility':
+						// console.log('cueVisibility')
+						break
+					case 'mediaPresetsChange':
+						// console.log('mediaPresetsChange')
+						break
+					case 'mediaPresetsActive':
+						this.mediaPresetsActive = collectedData.value
+						console.log('mediaPresetsActive', this.mediaPresetsActive)
+						this.checkFeedbacks('mediaPresetActive')
+						break
+	
+					default:
+						console.log('no case for: %s', collectedData.kind)
+						break
 				}
-				break
-			case 'reconnect-interval':
-				console.log('reconnect-interval: %s', event.data)
-				break
-
-			default:
-				console.log('no case for: %s', event.type)
-				break
+			} catch (error) {
+				console.log(error)
+			}
 		}
 	}
 
-	/**
-	 * Main function to setup the SSE stream and parser
-	 * @param {*} url
-	 */
+	// /**
+	//  * Main function to setup the SSE stream and parser
+	//  * @param {*} url
+	//  */
+	// readSSEStream = async (url) => {
+	// 	const parser = createParser(this.onParse)
+	// 	const sseStream = await this.getReadableStream(url)
+
+	// 	for await (const chunk of sseStream) {
+	// 		parser.feed(chunk.toString())
+
+	// 		readSSEStream(this.sseUrl).catch(console.error)
+
+	// 	}
+	// }
+
+	// Main function to set up the SSE stream and parser
 	readSSEStream = async (url) => {
 		const parser = createParser(this.onParse)
-		const sseStream = await this.getReadableStream(url)
+		const sseStream = await getSomeReadableStream(url)
 
 		for await (const chunk of sseStream) {
 			parser.feed(chunk.toString())
-
-			this.startPollingTimeLineState()
-			this.startPollingShowInfo()
-			readSSEStream(this.sseUrl).catch(console.error)
-
 		}
 	}
-	/**
-	 * Create a polling intervals to get the timeline states and show info
-	 */
-	async startPollingTimeLineState() {
-		if (this.pollingTimeLineState !== undefined) clearInterval(this.pollingTimeLineState)
 
-		this.pollingTimeLineState = setInterval(async () => {
-			await this.getTimeLineState()
-		}, 1000)
-	}
 	async startPollingShowInfo() {
 		if (this.pollingShowInfo !== undefined) clearInterval(this.pollingShowInfo)
 
 		this.pollingShowInfo = setInterval(async () => {
 			await this.getShowInfo()
-		}, 15000)
+		}, 5000)
 	}
 
 	/**
@@ -165,6 +175,7 @@ class ModuleInstance extends InstanceBase {
 		try {
 			const response = await fetch(`${this.baseUrl}/state`, { method: 'GET' })
 			let resultData = await response.json()
+			console.log(resultData)
 			this.playbackStatus = resultData
 			let clockTime = resultData.clockTime
 			let date = new Date(clockTime) // create Date object
@@ -181,21 +192,23 @@ class ModuleInstance extends InstanceBase {
 
 	/**
 	 * Get the show info from the API
-	 */
+	 **/
 	getShowInfo = async () => {
 		try {
 			const response = await fetch(`${this.baseUrl}/show`, { method: 'GET' })
 			let resultData = await response.json()
 			this.show = resultData.show
-			this.updateStatus(InstanceStatus.Ok)
-			createVariableDefinitions(this) // export variable definitions
+			this.snapshots = resultData.mediaPresets
+			createVariableDefinitions(this)
 			this.setVariableValues({
 				director: this.show.hosts.director,
 				asset_manager: this.show.hosts.asset_manager,
 			})
+
 			this.updateActions()
 			this.updateVariables()
 			this.updatePresets()
+			this.updateFeedbacks()
 			this.connected = true
 		} catch (e) {
 			this.log('error', `API ShowInfo Request failed (${e.message})`)
@@ -213,20 +226,22 @@ class ModuleInstance extends InstanceBase {
 		this.connected = false
 
 		parser.reset()
-		clearInterval(this.pollingTimeLineState)
-		clearInterval(this.pollingShowInfo)
+		if (this.pollingShowInfo) {
+			clearInterval(this.pollingShowInfo)
+			this.pollingShowInfo = undefined
+		}
 	}
-	/**
-	 * When the config is updated
-	 * @param {*} config
-	 */
+	
 	async configUpdated(config) {
+		console.log('updating config')
 		parser.reset()
-		clearInterval(this.pollingTimeLineState)
-		clearInterval(this.pollingShowInfo)
+		if (this.pollingShowInfo) {
+			clearInterval(this.pollingShowInfo)
+			this.pollingShowInfo = undefined
+		}
 		this.config = config
 		this.baseUrl = `http://${this.config.host}:3019/v0`
-		this.sseUrl = `${this.baseUrl}/sse`
+		this.sseUrl = `http://${this.config.host}:3019/v0/sse`
 		await this.getShowInfo()
 		if (this.connected) {
 			readSSEStream(this.sseUrl).catch(console.error)

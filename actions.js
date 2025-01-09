@@ -1,9 +1,18 @@
+const { Regex } = require('@companion-module/base')
+
 const getActions = (base) => {
 	let actions = {}
 
 	base.CHOICES_TIMELINES = []
 	base.CHOICES_CUES = []
-	// console.log('base.show', base.show)
+	base.CHOICES_SNAPSHOTS = []
+
+	for (const key1 in base.snapshots.presets) {
+		if (Object.hasOwnProperty.call(base.snapshots.presets, key1)) {
+			const element = base.snapshots.presets[key1]
+			base.CHOICES_SNAPSHOTS.push({ id: key1, label: element.name })
+		}
+	}
 	for (const key1 in base.show.timelines) {
 		if (Object.hasOwnProperty.call(base.show.timelines, key1)) {
 			const element = base.show.timelines[key1]
@@ -61,12 +70,12 @@ const getActions = (base) => {
 			},
 		],
 		callback: (action) => {
-			base.playbackStatus.timelines.forEach(timeline => {
-				console.log('timeline', timeline)
-				if(timeline.id === action.options.timeline && timeline.running === false){
-					action.options.action = 'play'
-				} else{	
+			base.playbackStatus.value.timelines.forEach(timeline => {
+				// check if a timeline is present in the list (then we have status otherwise play)
+				if(timeline.id === action.options.timeline && timeline.playbackStatus === 'play'){
 					action.options.action = 'pause'
+				} else{	
+					action.options.action = 'play'
 				}
 			})
 			base.log('debug', `API send: ${base.baseUrl}/${action.options.action}/${action.options.timeline}`)
@@ -179,6 +188,51 @@ const getActions = (base) => {
 				asset_manager: base.show.hosts.asset_manager,
 			})
 			base.updateActions()
+		},
+	}
+	actions['shutdown_node'] = {
+		name: 'shutdown node',
+		options: [
+			{
+				type: 'textinput',
+				useVariables: true,
+				label: 'IP Address node',
+				id: 'ip',
+				regex: Regex.IP,
+			},
+		],
+		callback: async (action) => {
+			base.log('debug', `API send: http://${action.options.ip}:3017/v0/shutdown`)
+			fetch(`http://${action.options.ip}:3017/v0/shutdown`, { method: 'POST' })
+		},
+	}
+	actions['snapshot_single'] = {
+		name: 'Toggle a single snapshot',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'Media snapshot',
+				choices: base.CHOICES_SNAPSHOTS,
+				id: 'snapshot',
+			},
+		],
+		callback: async (action) => {
+			base.log('debug', `API send: ${base.baseUrl}/active-media-snapshots/${action.options.snapshot}/toggle`)
+			fetch(`${base.baseUrl}/active-media-snapshots/${action.options.snapshot}/toggle`, { method: 'POST' })
+		},
+	}
+	actions['snapshot_clear'] = {
+		name: 'Clear the active snapshots',
+		options: [],
+		callback: async () => {
+			base.log('debug', `API send: ${base.baseUrl}/active-media-snapshots with empty array`)
+			fetch(`${base.baseUrl}/active-media-snapshots`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+				},
+				body: '[]',
+			});
 		},
 	}
 

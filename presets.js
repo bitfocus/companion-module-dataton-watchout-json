@@ -3,12 +3,11 @@ const { combineRgb } = require('@companion-module/base')
 const getPresets = (base) => {
 	const presets = {}
 	presets[`show_info`] = {
-		type: 'button', // This must be 'button' for now
-		category: 'Basic', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-		name: `Update timeline info`, // A name for the preset. Shown to the user when they hover over it
+		type: 'button',
+		category: 'Basic',
+		name: `Update timeline info`,
 		style: {
-			// This is the minimal set of style properties you must define
-			text: `Update Timelines`, // You can use variables from your module here
+			text: `Update Timelines`,
 			size: 'auto',
 			color: combineRgb(255, 255, 255),
 			bgcolor: combineRgb(0, 0, 0),
@@ -17,7 +16,6 @@ const getPresets = (base) => {
 			{
 				down: [
 					{
-						// add an action on down press
 						actionId: 'show_information',
 						options: {},
 					},
@@ -25,16 +23,15 @@ const getPresets = (base) => {
 				up: [],
 			},
 		],
-		feedbacks: [], // You can add some presets from your module here
+		feedbacks: [],
 	}
-	
+
 	presets[`jump_to_cue`] = {
-		type: 'button', // This must be 'button' for now
-		category: 'Basic', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-		name: `Jump to Cue`, // A name for the preset. Shown to the user when they hover over it
+		type: 'button',
+		category: 'Basic',
+		name: `Jump to Cue`,
 		style: {
-			// This is the minimal set of style properties you must define
-			text: `Jump to Cue`, // You can use variables from your module here
+			text: `Jump to Cue`,
 			size: 'auto',
 			color: combineRgb(255, 255, 255),
 			bgcolor: combineRgb(0, 0, 0),
@@ -43,7 +40,6 @@ const getPresets = (base) => {
 			{
 				down: [
 					{
-						// add an action on down press
 						actionId: 'jump_to_cue',
 						options: {
 							cue: '',
@@ -54,15 +50,14 @@ const getPresets = (base) => {
 				up: [],
 			},
 		],
-		feedbacks: [], // You can add some presets from your module here
+		feedbacks: [],
 	}
 	presets[`jump_to_time`] = {
-		type: 'button', // This must be 'button' for now
-		category: 'Basic', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-		name: `Jump to Time`, // A name for the preset. Shown to the user when they hover over it
+		type: 'button',
+		category: 'Basic',
+		name: `Jump to Time`,
 		style: {
-			// This is the minimal set of style properties you must define
-			text: `Jump to Time`, // You can use variables from your module here
+			text: `Jump to Time`,
 			size: 'auto',
 			color: combineRgb(255, 255, 255),
 			bgcolor: combineRgb(0, 0, 0),
@@ -71,7 +66,6 @@ const getPresets = (base) => {
 			{
 				down: [
 					{
-						// add an action on down press
 						actionId: 'jump_to_time',
 						options: {
 							timeline: '0',
@@ -83,18 +77,46 @@ const getPresets = (base) => {
 				up: [],
 			},
 		],
-		feedbacks: [], // You can add some presets from your module here
+		feedbacks: [],
 	}
-
+	presets[`shutdown`] = {
+		type: 'button',
+		category: 'MISC',
+		name: `Shutdown_node`,
+		style: {
+			text: `Shutdown node`,
+			size: '14px',
+			color: combineRgb(255, 255, 255),
+			bgcolor: combineRgb(0, 0, 0),
+		},
+		steps: [
+			{
+				down: [],
+				up: [],
+				2000: {
+					// Execute the actions after 2s while the button is held or only after it is released
+					options: { runWhileHeld: true },
+					actions: [
+						{
+							actionId: 'shutdown_node',
+							options: {
+								ip: '',
+							},
+						},
+					],
+				},
+			},
+		],
+		feedbacks: [],
+	}
 	for (const key in base.show.timelines) {
 		if (Object.hasOwnProperty.call(base.show.timelines, key)) {
 			presets[`timeline_playback_control_id${key}`] = {
-				type: 'button', // This must be 'button' for now
-				category: 'Play', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-				name: `Play timeline`, // A name for the preset. Shown to the user when they hover over it
+				type: 'button',
+				category: 'Play',
+				name: `Play timeline`,
 				style: {
-					// This is the minimal set of style properties you must define
-					text: `Play $(watchout-json:${key})`, // You can use variables from your module here
+					text: `Play $(watchout-json:${key})`,
 					size: '14px',
 					color: combineRgb(255, 255, 255),
 					bgcolor: combineRgb(0, 0, 0),
@@ -103,7 +125,6 @@ const getPresets = (base) => {
 					{
 						down: [
 							{
-								// add an action on down press
 								actionId: 'timeline_action',
 								options: {
 									timeline: key,
@@ -119,35 +140,21 @@ const getPresets = (base) => {
 						feedbackId: 'timeLineState',
 						options: {
 							timeline: key,
-							running: 'true',
+							playbackStatus: 'run',
 						},
 						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
 							color: combineRgb(255, 255, 255),
 							bgcolor: combineRgb(0, 204, 0),
 						},
 					},
-					{
-						feedbackId: 'timeLineState',
-						options: {
-							timeline: key,
-							running: 'false',
-						},
-						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
-							color: combineRgb(0, 0, 0),
-							bgcolor: combineRgb(255, 255, 0),
-						},
-					},
-				], // You can add some presets from your module here
+				],
 			}
 			presets[`timeline_pause_control_id${key}`] = {
-				type: 'button', // This must be 'button' for now
-				category: 'Pause', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-				name: `Pause timeline`, // A name for the preset. Shown to the user when they hover over it
+				type: 'button',
+				category: 'Pause',
+				name: `Pause timeline`,
 				style: {
-					// This is the minimal set of style properties you must define
-					text: `Pause $(watchout-json:${key})`, // You can use variables from your module here
+					text: `Pause $(watchout-json:${key})`,
 					size: '14px',
 					color: combineRgb(255, 255, 255),
 					bgcolor: combineRgb(0, 0, 0),
@@ -156,7 +163,6 @@ const getPresets = (base) => {
 					{
 						down: [
 							{
-								// add an action on down press
 								actionId: 'timeline_action',
 								options: {
 									timeline: key,
@@ -172,35 +178,21 @@ const getPresets = (base) => {
 						feedbackId: 'timeLineState',
 						options: {
 							timeline: key,
-							running: 'true',
+							playbackStatus: 'pause',
 						},
 						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
-							color: combineRgb(255, 255, 255),
-							bgcolor: combineRgb(0, 204, 0),
-						},
-					},
-					{
-						feedbackId: 'timeLineState',
-						options: {
-							timeline: key,
-							running: 'false',
-						},
-						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
 							color: combineRgb(0, 0, 0),
 							bgcolor: combineRgb(255, 255, 0),
 						},
 					},
-				], // You can add some presets from your module here
+				],
 			}
 			presets[`timeline_toggle_control_id${key}`] = {
-				type: 'button', // This must be 'button' for now
-				category: 'Toggle', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-				name: `Toggle timeline`, // A name for the preset. Shown to the user when they hover over it
+				type: 'button',
+				category: 'Toggle',
+				name: `Toggle timeline`,
 				style: {
-					// This is the minimal set of style properties you must define
-					text: `Toggle $(watchout-json:${key})`, // You can use variables from your module here
+					text: `Toggle $(watchout-json:${key})`,
 					size: '14px',
 					color: combineRgb(255, 255, 255),
 					bgcolor: combineRgb(0, 0, 0),
@@ -209,7 +201,6 @@ const getPresets = (base) => {
 					{
 						down: [
 							{
-								// add an action on down press
 								actionId: 'timeline_toggle',
 								options: {
 									timeline: key,
@@ -224,10 +215,9 @@ const getPresets = (base) => {
 						feedbackId: 'timeLineState',
 						options: {
 							timeline: key,
-							running: 'true',
+							playbackStatus: 'run',
 						},
 						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
 							color: combineRgb(255, 255, 255),
 							bgcolor: combineRgb(0, 204, 0),
 						},
@@ -236,23 +226,21 @@ const getPresets = (base) => {
 						feedbackId: 'timeLineState',
 						options: {
 							timeline: key,
-							running: 'false',
+							playbackStatus: 'pause',
 						},
 						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
 							color: combineRgb(0, 0, 0),
 							bgcolor: combineRgb(255, 255, 0),
 						},
 					},
-				], // You can add some presets from your module here
+				],
 			}
 			presets[`timeline_stop_control_id${key}`] = {
-				type: 'button', // This must be 'button' for now
-				category: 'Stop', // This groups presets into categories in the ui. Try to create logical groups to help users find presets
-				name: `Stop timeline`, // A name for the preset. Shown to the user when they hover over it
+				type: 'button',
+				category: 'Stop',
+				name: `Stop timeline`,
 				style: {
-					// This is the minimal set of style properties you must define
-					text: `Stop $(watchout-json:${key})`, // You can use variables from your module here
+					text: `Stop $(watchout-json:${key})`,
 					size: '14px',
 					color: combineRgb(255, 255, 255),
 					bgcolor: combineRgb(0, 0, 0),
@@ -261,7 +249,6 @@ const getPresets = (base) => {
 					{
 						down: [
 							{
-								// add an action on down press
 								actionId: 'timeline_action',
 								options: {
 									timeline: key,
@@ -277,32 +264,80 @@ const getPresets = (base) => {
 						feedbackId: 'timeLineState',
 						options: {
 							timeline: key,
-							running: 'true',
+							playbackStatus: 'stop',
 						},
 						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
+							color: combineRgb(255, 255, 255),
+							bgcolor: combineRgb(0, 0, 204),
+						},
+					},
+				],
+			}
+		}
+	}
+	presets[`snapshot_clear`] = {
+		type: 'button',
+		category: 'Snapshot',
+		name: `Clear snapshots`,
+		style: {
+			text: `Clear all active snapshots`,
+			size: '14px',
+			color: combineRgb(255, 255, 255),
+			bgcolor: combineRgb(0, 0, 0),
+		},
+		steps: [
+			{
+				down: [
+					{
+						actionId: 'snapshot_clear',
+						options: {},
+					},
+				],
+				up: [],
+			},
+		],
+		feedbacks: [],
+	}
+	for (const key in base.snapshots.presets) {
+		if(Object.hasOwnProperty.call(base.snapshots.presets, key)) {
+			presets[`snapshot_toggle_control_id${key}`] = {
+				type: 'button',
+				category: 'Snapshot',
+				name: `Toggle snapshot`,
+				style: {
+					text: `Toggle Snapshot $(watchout-json:${key})`,
+					size: '14px',
+					color: combineRgb(255, 255, 255),
+					bgcolor: combineRgb(0, 0, 0),
+				},
+				steps: [
+					{
+						down: [
+							{
+								actionId: 'snapshot_single',
+								options: {
+									snapshot: key,
+								},
+							},
+						],
+						up: [],
+					},
+				],
+				feedbacks: [
+					{
+						feedbackId: 'mediaPresetActive',
+						options: {
+							mediaPreset: key,
+						},
+						style: {
 							color: combineRgb(255, 255, 255),
 							bgcolor: combineRgb(0, 204, 0),
 						},
 					},
-					{
-						feedbackId: 'timeLineState',
-						options: {
-							timeline: key,
-							running: 'false',
-						},
-						style: {
-							// The style property is only valid for 'boolean' feedbacks, and defines the style change it will have.
-							color: combineRgb(0, 0, 0),
-							bgcolor: combineRgb(255, 255, 0),
-						},
-					},
-				], // You can add some presets from your module here
+				],
 			}
-			
 		}
 	}
-
 	return presets
 }
 
