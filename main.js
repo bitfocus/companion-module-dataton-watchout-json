@@ -55,7 +55,6 @@ class ModuleInstance extends InstanceBase {
 			await this.getShowInfo()
 			this.updateStatus(InstanceStatus.Ok, 'Connected')	
 			if (this.connected) {
-				console.log('this.connected = true')
 				this.readSSEStream(this.sseUrl).catch(console.error)
 				// this.startPollingShowInfo()
 			}
@@ -96,7 +95,6 @@ class ModuleInstance extends InstanceBase {
 					case 'playbackState':
 						// update heartbeat variable
 						let date = new Date(collectedData.value.clockTime) // create Date object
-						console.log('clockTime', date.toString())
 						this.setVariableValues({
 							heartbeat: date.toString(),
 						})
