@@ -25,7 +25,6 @@ const getPresets = (base) => {
 		],
 		feedbacks: [],
 	}
-
 	presets[`jump_to_cue`] = {
 		type: 'button',
 		category: 'Basic',
@@ -145,6 +144,17 @@ const getPresets = (base) => {
 						style: {
 							color: combineRgb(255, 255, 255),
 							bgcolor: combineRgb(0, 204, 0),
+						},
+					},
+					{
+						feedbackId: 'timeLineState',
+						options: {
+							timeline: key,
+							playbackStatus: 'pause',
+						},
+						style: {
+							color: combineRgb(0, 0, 0),
+							bgcolor: combineRgb(255, 255, 0),
 						},
 					},
 				],
@@ -299,7 +309,7 @@ const getPresets = (base) => {
 		feedbacks: [],
 	}
 	for (const key in base.snapshots.presets) {
-		if(Object.hasOwnProperty.call(base.snapshots.presets, key)) {
+		if (Object.hasOwnProperty.call(base.snapshots.presets, key)) {
 			presets[`snapshot_toggle_control_id${key}`] = {
 				type: 'button',
 				category: 'Snapshot',

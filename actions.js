@@ -72,7 +72,7 @@ const getActions = (base) => {
 		callback: (action) => {
 			base.playbackStatus.value.timelines.forEach(timeline => {
 				// check if a timeline is present in the list (then we have status otherwise play)
-				if(timeline.id === action.options.timeline && timeline.playbackStatus === 'play'){
+				if(timeline.id === action.options.timeline && timeline.playbackStatus === 'run'){
 					action.options.action = 'pause'
 				} else{	
 					action.options.action = 'play'
