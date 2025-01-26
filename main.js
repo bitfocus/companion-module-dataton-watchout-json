@@ -22,7 +22,7 @@ class ModuleInstance extends InstanceBase {
 	snapshots
 	baseUrl
 	sseUrl
-	playbackStatus
+	playbackStatus = []
 	mediaPresetsActive
 	CHOICES_TIMELINES
 	CHOICES_CUES
@@ -98,7 +98,19 @@ class ModuleInstance extends InstanceBase {
 						this.setVariableValues({
 							heartbeat: date.toString(),
 						})
-						this.playbackStatus = collectedData
+						// Collected data has an array of timelines
+						collectedData.value.timelines.forEach(timeline => {
+							// check if the timeline is in local cache
+							let timelineIndex = this.playbackStatus.findIndex(t => t.id === timeline.id)
+							if (timelineIndex > -1) {
+								// update the timeline
+								this.playbackStatus[timelineIndex] = timeline
+							} else {
+								// add the timeline
+								this.playbackStatus.push(timeline)
+							}
+						});
+						
 						this.checkFeedbacks('timeLineState')
 						break
 					case 'reconnect-interval':
@@ -173,8 +185,19 @@ class ModuleInstance extends InstanceBase {
 		try {
 			const response = await fetch(`${this.baseUrl}/state`, { method: 'GET' })
 			let resultData = await response.json()
-			console.log(resultData)
-			this.playbackStatus = resultData
+			// console.log(resultData)
+			collectedData.value.timelines.forEach(timeline => {
+				// check if the timeline is in local cache
+				let timelineIndex = this.playbackStatus.findIndex(t => t.id === timeline.id)
+				if (timelineIndex > -1) {
+					// update the timeline
+					this.playbackStatus[timelineIndex] = timeline
+				} else {
+					// add the timeline
+					this.playbackStatus.push(timeline)
+				}
+			});
+			// this.playbackStatus = resultData
 			let clockTime = resultData.clockTime
 			let date = new Date(clockTime) // create Date object
 			this.setVariableValues({

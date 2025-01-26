@@ -31,8 +31,8 @@ module.exports = async function (base) {
 				},
 			],
 			callback: (feedback) => {
-				if (base.playbackStatus && base.playbackStatus.value.timelines) {
-					return base.playbackStatus.value.timelines.some((timeline) => {
+				if (base.playbackStatus && base.playbackStatus) {
+					return base.playbackStatus.some((timeline) => {
 						return (
 							timeline.id === feedback.options.timeline &&
 							timeline.playbackStatus.toString() === feedback.options.playbackStatus
