@@ -21,6 +21,7 @@ class ModuleInstance extends InstanceBase {
 	show
 	snapshots
 	baseUrl
+	parser
 	sseUrl
 	playbackStatus = []
 	mediaPresetsActive
@@ -52,13 +53,18 @@ class ModuleInstance extends InstanceBase {
 			// Get base show info to load timelines
 			createVariableDefinitions(this) // export variable definitions
 
-			await this.getShowInfo()
-			this.updateStatus(InstanceStatus.Ok, 'Connected')	
-			if (this.connected) {
-				this.readSSEStream(this.sseUrl).catch(console.error)
-				// this.startPollingShowInfo()
-			}
-			this.updateFeedbacks()
+			this.getShowInfo()
+				.then(() => {
+					// Now that we have the show info, we can start the SSE stream
+					this.readSSEStream(this.sseUrl).catch(console.error)
+					// Start polling the show info
+					this.startPollingShowInfo()
+					this.updateStatus(InstanceStatus.Ok, 'Connected')
+				})
+				.catch((e) => {
+					this.log('error', 'Error while getting showInfo')
+					this.updateStatus(InstanceStatus.UnknownError, 'connection fails')
+				})
 		}
 	}
 
@@ -74,14 +80,7 @@ class ModuleInstance extends InstanceBase {
 		}
 		return response.body // ReadableStream
 	}
-	// // Function to handle parsed events
-	// const onParse = (event) => {
-	// 	if (event.type === 'event') {
-	// 		console.log('data: %s', event.data)
-	// 	} else if (event.type === 'reconnect-interval') {
-	// 		console.log('We should set reconnect interval to %d milliseconds', event.value)
-	// 	}
-	// }
+
 	/**
 	 * handle sse parse events
 	 * @param {*} event
@@ -99,9 +98,9 @@ class ModuleInstance extends InstanceBase {
 							heartbeat: date.toString(),
 						})
 						// Collected data has an array of timelines
-						collectedData.value.timelines.forEach(timeline => {
+						collectedData.value.timelines.forEach((timeline) => {
 							// check if the timeline is in local cache
-							let timelineIndex = this.playbackStatus.findIndex(t => t.id === timeline.id)
+							let timelineIndex = this.playbackStatus.findIndex((t) => t.id === timeline.id)
 							if (timelineIndex > -1) {
 								// update the timeline
 								this.playbackStatus[timelineIndex] = timeline
@@ -109,8 +108,8 @@ class ModuleInstance extends InstanceBase {
 								// add the timeline
 								this.playbackStatus.push(timeline)
 							}
-						});
-						
+						})
+
 						this.checkFeedbacks('timeLineState')
 						break
 					case 'reconnect-interval':
@@ -133,7 +132,7 @@ class ModuleInstance extends InstanceBase {
 						console.log('mediaPresetsActive', this.mediaPresetsActive)
 						this.checkFeedbacks('mediaPresetActive')
 						break
-	
+
 					default:
 						console.log('no case for: %s', collectedData.kind)
 						break
@@ -145,36 +144,23 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	// /**
-	//  * Main function to setup the SSE stream and parser
+	//  * Main function to setup the SSE stream and this.parser
 	//  * @param {*} url
 	//  */
-	// readSSEStream = async (url) => {
-	// 	const parser = createParser(this.onParse)
-	// 	const sseStream = await this.getReadableStream(url)
-
-	// 	for await (const chunk of sseStream) {
-	// 		parser.feed(chunk.toString())
-
-	// 		readSSEStream(this.sseUrl).catch(console.error)
-
-	// 	}
-	// }
-
-	// Main function to set up the SSE stream and parser
 	readSSEStream = async (url) => {
-		const parser = createParser(this.onParse)
+		this.parser = createParser(this.onParse)
 		const sseStream = await getSomeReadableStream(url)
 
 		for await (const chunk of sseStream) {
-			parser.feed(chunk.toString())
+			this.parser.feed(chunk.toString())
 		}
 	}
 
 	async startPollingShowInfo() {
 		if (this.pollingShowInfo !== undefined) clearInterval(this.pollingShowInfo)
 
-		this.pollingShowInfo = setInterval(async () => {
-			await this.getShowInfo()
+		this.pollingShowInfo = setInterval(() => {
+			this.getShowInfo()
 		}, 5000)
 	}
 
@@ -186,9 +172,9 @@ class ModuleInstance extends InstanceBase {
 			const response = await fetch(`${this.baseUrl}/state`, { method: 'GET' })
 			let resultData = await response.json()
 			// console.log(resultData)
-			collectedData.value.timelines.forEach(timeline => {
+			collectedData.value.timelines.forEach((timeline) => {
 				// check if the timeline is in local cache
-				let timelineIndex = this.playbackStatus.findIndex(t => t.id === timeline.id)
+				let timelineIndex = this.playbackStatus.findIndex((t) => t.id === timeline.id)
 				if (timelineIndex > -1) {
 					// update the timeline
 					this.playbackStatus[timelineIndex] = timeline
@@ -196,7 +182,7 @@ class ModuleInstance extends InstanceBase {
 					// add the timeline
 					this.playbackStatus.push(timeline)
 				}
-			});
+			})
 			// this.playbackStatus = resultData
 			let clockTime = resultData.clockTime
 			let date = new Date(clockTime) // create Date object
@@ -206,7 +192,6 @@ class ModuleInstance extends InstanceBase {
 			this.checkFeedbacks('timeLineState')
 		} catch (e) {
 			this.log('error', `API heartbeat Request failed (${e.message})`)
-			this.connected = false
 			this.updateStatus(InstanceStatus.UnknownError, e.code)
 		}
 	}
@@ -214,28 +199,31 @@ class ModuleInstance extends InstanceBase {
 	/**
 	 * Get the show info from the API
 	 **/
-	getShowInfo = async () => {
-		try {
-			const response = await fetch(`${this.baseUrl}/show`, { method: 'GET' })
-			let resultData = await response.json()
-			this.show = resultData.show
-			this.snapshots = resultData.mediaPresets
-			createVariableDefinitions(this)
-			this.setVariableValues({
-				director: this.show.hosts.director,
-				asset_manager: this.show.hosts.asset_manager,
-			})
+	getShowInfo = () => {
+		return new Promise(async (resolve, reject) => {
+			try {
+				const response = await fetch(`${this.baseUrl}/show`, { method: 'GET' })
+				let resultData = await response.json()
 
-			this.updateActions()
-			this.updateVariables()
-			this.updatePresets()
-			this.updateFeedbacks()
-			this.connected = true
-		} catch (e) {
-			this.log('error', `API ShowInfo Request failed (${e.message})`)
-			this.connected = false
-			this.updateStatus(InstanceStatus.UnknownError, e.code)
-		}
+				this.show = resultData.show
+				this.snapshots = resultData.mediaPresets
+				createVariableDefinitions(this)
+				this.setVariableValues({
+					director: this.show.hosts.director,
+					asset_manager: this.show.hosts.asset_manager,
+				})
+
+				this.updateActions()
+				this.updateVariables()
+				this.updatePresets()
+				this.updateFeedbacks()
+				resolve()
+			} catch (e) {
+				this.log('error', `API ShowInfo Request failed (${e.message})`)
+				this.updateStatus(InstanceStatus.UnknownError, e.code)
+				reject(e)
+			}
+		})
 	}
 
 	/**
@@ -243,32 +231,43 @@ class ModuleInstance extends InstanceBase {
 	 */
 	async destroy() {
 		this.log('debug', 'destroy')
-
-		this.connected = false
-
-		parser.reset()
+		// stop the this.parser
+		if (this.parser) {
+			this.parser.reset()
+			this.parser = null
+		}
 		if (this.pollingShowInfo) {
 			clearInterval(this.pollingShowInfo)
 			this.pollingShowInfo = undefined
 		}
 	}
-	
+
 	async configUpdated(config) {
-		console.log('updating config')
-		parser.reset()
+		this.log('debug', JSON.stringify(config))
+		this.config = config
+		if (this.parser) {
+			this.parser.reset()
+			this.parser = null
+		}
 		if (this.pollingShowInfo) {
 			clearInterval(this.pollingShowInfo)
 			this.pollingShowInfo = undefined
 		}
-		this.config = config
 		this.baseUrl = `http://${this.config.host}:3019/v0`
-		this.sseUrl = `http://${this.config.host}:3019/v0/sse`
-		await this.getShowInfo()
-		if (this.connected) {
-			readSSEStream(this.sseUrl).catch(console.error)
-			// this.startPollingTimeLineState()
-			this.startPollingShowInfo()
-		}
+		this.sseUrl = `http://${this.config.host}:3019/v1/sse`
+		this.getShowInfo()
+			.then(() => {
+				// Now that we have the show info, we can start the SSE stream
+				this.readSSEStream(this.sseUrl).catch(console.error)
+				// Start polling the show info
+				this.startPollingShowInfo()
+				this.log('debug', 'Connected')
+				this.updateStatus(InstanceStatus.Ok, 'Connected')
+			})
+			.catch((e) => {
+				this.log('error', 'Error while getting showInfo')
+				this.updateStatus(InstanceStatus.UnknownError, 'connection fails')
+			})
 	}
 
 	// Return config fields for web config
