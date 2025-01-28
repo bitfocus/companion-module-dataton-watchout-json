@@ -30,6 +30,11 @@ const getActions = (base) => {
 			}
 		}
 	}
+	if (base.config.sortTimelines) {
+		base.CHOICES_TIMELINES.sort((a, b) => a.label.localeCompare(b.label))
+	} else {
+		base.CHOICES_TIMELINES.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
+	}
 
 	actions['timeline_action'] = {
 		name: 'Timeline Action',
@@ -151,12 +156,7 @@ const getActions = (base) => {
 			})
 		},
 	}
-	/*** 
-    format "/v0/jump-to-time/{tl_id}?time={time}&state={state}"
-    {tl_id} is timeline id
-    {time} is given in milliseconds
-    {state} is play or pause
-***/
+
 	actions['jump_to_time'] = {
 		name: 'Jump to Time',
 		options: [
@@ -197,12 +197,7 @@ const getActions = (base) => {
 			)
 		},
 	}
-	/*** 
-    format "/v0/jump-to-cue/{tl_id}/{cue_id}?state={state}"
-    {tl_id} is timeline id
-    {cue_id} is cue id
-    {state} is play or pause
-***/
+
 	actions['jump_to_cue'] = {
 		name: 'Jump to Cue',
 		options: [
@@ -229,21 +224,7 @@ const getActions = (base) => {
 			fetch(`${base.baseUrl}/jump-to-cue/${action.options.cue}?state=${action.options.state}`, { method: 'POST' })
 		},
 	}
-	// actions['current_playback_status'] = {
-	// 	name: 'Current Playback Status',
-	// 	options: [],
-	// 	callback: async () => {
-	// 		base.log('debug', `API send: ${base.baseUrl}/state`)
-	// 		const response = await fetch(`${base.baseUrl}/state`, { method: 'GET' })
-	// 		let resultData = await response.json()
-	// 		base.playbackStatus = resultData
-	// 		base.log('debug', JSON.stringify(resultData))
-	// 		let clockTime = resultData.clockTime
-	// 		let date = new Date(clockTime); // create Date object
-	// 		console.log('clockTime', date.toString())
-	// 		base.checkFeedbacks('timeLineState')
-	// 	},
-	// }
+
 	actions['show_information'] = {
 		name: 'Show information',
 		options: [],

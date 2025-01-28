@@ -55,6 +55,10 @@ class ModuleInstance extends InstanceBase {
 
 			this.getShowInfo()
 				.then(() => {
+					this.updateActions()
+					this.updateVariables()
+					this.updatePresets()
+					this.updateFeedbacks()
 					// Now that we have the show info, we can start the SSE stream
 					this.readSSEStream(this.sseUrl).catch(console.error)
 					// Start polling the show info
@@ -207,16 +211,11 @@ class ModuleInstance extends InstanceBase {
 
 				this.show = resultData.show
 				this.snapshots = resultData.mediaPresets
-				createVariableDefinitions(this)
 				this.setVariableValues({
 					director: this.show.hosts.director,
 					asset_manager: this.show.hosts.asset_manager,
+					show_name: resultData.showName,
 				})
-
-				this.updateActions()
-				this.updateVariables()
-				this.updatePresets()
-				this.updateFeedbacks()
 				resolve()
 			} catch (e) {
 				this.log('error', `API ShowInfo Request failed (${e.message})`)
@@ -255,8 +254,13 @@ class ModuleInstance extends InstanceBase {
 		}
 		this.baseUrl = `http://${this.config.host}:3019/v0`
 		this.sseUrl = `http://${this.config.host}:3019/v1/sse`
+		createVariableDefinitions(this)
 		this.getShowInfo()
 			.then(() => {
+				this.updateActions()
+				this.updateVariables()
+				this.updatePresets()
+				this.updateFeedbacks()
 				// Now that we have the show info, we can start the SSE stream
 				this.readSSEStream(this.sseUrl).catch(console.error)
 				// Start polling the show info
@@ -279,6 +283,12 @@ class ModuleInstance extends InstanceBase {
 				label: 'Director IP',
 				width: 8,
 				regex: Regex.IP,
+			},
+			{
+				type: 'checkbox',
+				id: 'sortTimelines',
+				label: 'Sort timelines on name',
+				width: 8,
 			},
 		]
 	}

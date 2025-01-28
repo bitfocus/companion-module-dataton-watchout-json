@@ -4,6 +4,7 @@ const createVariableDefinitions = (base) => {
 		{ variableId: 'heartbeat', name: 'Last reply from Watchout' },
 		{ variableId: 'asset_manager', name: 'Asset Manager' },
 		{ variableId: 'director', name: 'Director' },
+		{ variableId: 'show_name', name: 'Show name' },
 		// ...dynamicVariables,
 	])
 }
@@ -26,6 +27,7 @@ const setDynamicVariables = (base) => {
 		{ variableId: 'heartbeat', name: 'Last reply from Watchout' },
 		{ variableId: 'asset_manager', name: 'Asset Manager' },
 		{ variableId: 'director', name: 'Director' },
+		{ variableId: 'show_name', name: 'Show name' },
 		...dynamicVariables,
 	])
 	valuesVariables = {}
