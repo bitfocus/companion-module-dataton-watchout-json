@@ -70,16 +70,85 @@ const getActions = (base) => {
 			},
 		],
 		callback: (action) => {
-			base.playbackStatus.forEach(timeline => {
+			base.playbackStatus.forEach((timeline) => {
 				// check if a timeline is present in the list (then we have status otherwise play)
-				if(timeline.id === action.options.timeline && timeline.playbackStatus === 'run'){
+				if (timeline.id === action.options.timeline && timeline.playbackStatus === 'run') {
 					action.options.action = 'pause'
-				} else{	
+				} else {
 					action.options.action = 'play'
 				}
 			})
 			base.log('debug', `API send: ${base.baseUrl}/${action.options.action}/${action.options.timeline}`)
 			fetch(`${base.baseUrl}/${action.options.action}/${action.options.timeline}`, { method: 'POST' })
+		},
+	}
+	actions['timeline_condition_start'] = {
+		name: 'Only play timeline if',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'The following timeline will play',
+				id: 'timeline',
+				default: '0',
+				choices: base.CHOICES_TIMELINES,
+			},
+			{
+				type: 'dropdown',
+				label: 'when the following condition is met',
+				id: 'status',
+				default: 'pause',
+				choices: [
+					{ id: 'run', label: 'Play' },
+					{ id: 'pause', label: 'Pause' },
+					{ id: 'stop', label: 'Stop' },
+				],
+			},
+		],
+		callback: (action) => {
+			base.playbackStatus.forEach((timeline) => {
+				if (timeline.id === action.options.timeline && timeline.playbackStatus.toString() === action.options.status) {
+					base.log('debug', `API send: ${base.baseUrl}/play/${action.options.timeline}`)
+					fetch(`${base.baseUrl}/play/${action.options.timeline}`, { method: 'POST' })
+				}
+			})
+		},
+	}
+	actions['timeline_condition_start_extra'] = {
+		name: 'Only play timeline if other timeline condition is met',
+		options: [
+			{
+				type: 'dropdown',
+				label: 'The following timeline will play',
+				id: 'timeline1',
+				default: '0',
+				choices: base.CHOICES_TIMELINES,
+			},
+			{
+				type: 'dropdown',
+				label: 'When this timeline',
+				id: 'timeline2',
+				default: '0',
+				choices: base.CHOICES_TIMELINES,
+			},
+			{
+				type: 'dropdown',
+				label: 'has this state',
+				id: 'status',
+				default: 'pause',
+				choices: [
+					{ id: 'run', label: 'Play' },
+					{ id: 'pause', label: 'Pause' },
+					{ id: 'stop', label: 'Stop' },
+				],
+			},
+		],
+		callback: (action) => {
+			base.playbackStatus.forEach((timeline) => {
+				if (timeline.id === action.options.timeline2 && timeline.playbackStatus.toString() === action.options.status) {
+					base.log('debug', `API send: ${base.baseUrl}/play/${action.options.timeline1}`)
+					fetch(`${base.baseUrl}/play/${action.options.timeline1}`, { method: 'POST' })
+				}
+			})
 		},
 	}
 	/*** 
@@ -232,7 +301,7 @@ const getActions = (base) => {
 					'Content-Type': 'application/json',
 				},
 				body: '[]',
-			});
+			})
 		},
 	}
 
