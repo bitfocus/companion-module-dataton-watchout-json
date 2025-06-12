@@ -1,25 +1,24 @@
 const { InstanceBase, Regex, runEntrypoint, InstanceStatus } = require('@companion-module/base')
 const UpgradeScripts = require('./upgrades.js')
+const {EventSource} = require('eventsource')
+console.log('EventSource loaded:', typeof EventSource)
 const { getActions } = require('./actions')
 const { getPresets } = require('./presets')
-const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args))
+// Node.js v18+ includes fetch globally.
 const UpdateFeedbacks = require('./feedbacks.js')
 const { createVariableDefinitions, setDynamicVariables } = require('./variables.js')
-const { createParser } = require('eventsource-parser')
 
-// Function to simulate getting a readable stream from an SSE endpoint
-const getSomeReadableStream = async (url) => {
-	const response = await fetch(url)
-	if (!response.ok) {
-		throw new Error(`Failed to connect to ${url}`)
-	}
-	return response.body // This is the Node.js readable stream
-}
-
+/**
+ * Main module instance for the Companion Watchout integration.
+ * Handles initialization, API communication, SSE, polling, and state management.
+ * @class
+ * @extends InstanceBase
+ */
 class ModuleInstance extends InstanceBase {
 	// Some basic objects and variables
 	show
 	snapshots
+	cueSets
 	baseUrl
 	parser
 	sseUrl
@@ -28,20 +27,54 @@ class ModuleInstance extends InstanceBase {
 	CHOICES_TIMELINES
 	CHOICES_CUES
 	CHOICES_SNAPSHOTS
+	CHOICES_CUESETS
 	pollingShowInfo
 	connected = false
+	es = null
 
+	/**
+	 * @constructor
+	 * @param {*} internal - Internal instance object from Companion
+	 */
 	constructor(internal) {
 		super(internal)
 	}
+	/**
+	 * Main function to setup the SSE stream and this.parser.
+	 * Reads the SSE stream and feeds data to the parser.
+	 * @async
+	 * @param {string} url - The SSE endpoint URL.
+	 * @returns {Promise<void>}
+	 */
+	readSSEStream = (url) => {
+		console.log('readSSEStream', url)
+		if (this.es) {
+			this.es.close()
+		}
+		this.es = new EventSource(url)
+		console.log('EventSource created:', this.es)
+		this.es.onmessage = (event) => {
+			this.onParse({ type: 'event', data: event.data })
+		}
+		this.es.onerror = (err) => {
+			console.error('SSE error:', err)
+		}
+	}
 
+	/**
+	 * Checks if an object is empty (has no keys).
+	 * @param {Object} obj - The object to check.
+	 * @returns {boolean} True if the object is empty, false otherwise.
+	 */
 	isObjEmpty(obj) {
 		return Object.keys(obj).length === 0
 	}
 
 	/**
-	 * initialization of the module
-	 * @param {*} config
+	 * Initialization of the module.
+	 * Sets up API URLs, loads show info, and starts SSE and polling.
+	 * @param {*} config - Module configuration object.
+	 * @returns {Promise<void>}
 	 */
 	async init(config) {
 		this.config = config
@@ -49,7 +82,6 @@ class ModuleInstance extends InstanceBase {
 		if (this.config.host !== undefined && this.config.host !== '') {
 			this.baseUrl = `http://${this.config.host}:3019/v0`
 			this.sseUrl = `http://${this.config.host}:3019/v1/sse`
-
 			// Get base show info to load timelines
 			createVariableDefinitions(this) // export variable definitions
 
@@ -60,22 +92,24 @@ class ModuleInstance extends InstanceBase {
 					this.updatePresets()
 					this.updateFeedbacks()
 					// Now that we have the show info, we can start the SSE stream
-					this.readSSEStream(this.sseUrl).catch(console.error)
+					this.readSSEStream(this.sseUrl)
 					// Start polling the show info
-					this.startPollingShowInfo()
+					// this.startPollingShowInfo()
 					this.updateStatus(InstanceStatus.Ok, 'Connected')
 				})
 				.catch((e) => {
-					this.log('error', 'Error while getting showInfo')
+					this.log('error', ` Error while getting showInfo, (${e.message})`)
 					this.updateStatus(InstanceStatus.UnknownError, 'connection fails')
 				})
 		}
 	}
 
 	/**
-	 * Get a readable stream from a SSE endpoint
-	 * @param {*} url
-	 * @returns Readable Stream
+	 * Get a readable stream from a SSE endpoint.
+	 * @async
+	 * @param {string} url - The SSE endpoint URL.
+	 * @returns {Promise<ReadableStream>} The response body as a readable stream.
+	 * @throws {Error} If the fetch request fails.
 	 */
 	getReadableStream = async (url) => {
 		const response = await fetch(url)
@@ -86,8 +120,24 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
-	 * handle sse parse events
-	 * @param {*} event
+	 * Updates the local playbackStatus array with timelines from the given array.
+	 * @param {Array<Object>} timelines - Array of timeline objects to update.
+	 */
+	updateTimelinesFromArray(timelines) {
+		timelines.forEach((timeline) => {
+			const timelineIndex = this.playbackStatus.findIndex((t) => t.id === timeline.id)
+			if (timelineIndex > -1) {
+				this.playbackStatus[timelineIndex] = timeline
+			} else {
+				this.playbackStatus.push(timeline)
+			}
+		})
+	}
+
+	/**
+	 * Handles SSE parse events.
+	 * Updates state and variables based on event kind.
+	 * @param {*} event - The SSE event object.
 	 */
 	onParse = (event) => {
 		if (event.type === 'event') {
@@ -101,19 +151,7 @@ class ModuleInstance extends InstanceBase {
 						this.setVariableValues({
 							heartbeat: date.toString(),
 						})
-						// Collected data has an array of timelines
-						collectedData.value.timelines.forEach((timeline) => {
-							// check if the timeline is in local cache
-							let timelineIndex = this.playbackStatus.findIndex((t) => t.id === timeline.id)
-							if (timelineIndex > -1) {
-								// update the timeline
-								this.playbackStatus[timelineIndex] = timeline
-							} else {
-								// add the timeline
-								this.playbackStatus.push(timeline)
-							}
-						})
-
+						this.updateTimelinesFromArray(collectedData.value.timelines)
 						this.checkFeedbacks('timeLineState')
 						break
 					case 'reconnect-interval':
@@ -147,19 +185,10 @@ class ModuleInstance extends InstanceBase {
 		}
 	}
 
-	// /**
-	//  * Main function to setup the SSE stream and this.parser
-	//  * @param {*} url
-	//  */
-	readSSEStream = async (url) => {
-		this.parser = createParser(this.onParse)
-		const sseStream = await getSomeReadableStream(url)
-
-		for await (const chunk of sseStream) {
-			this.parser.feed(chunk.toString())
-		}
-	}
-
+	/**
+	 * Starts polling the show info at a regular interval.
+	 * @returns {void}
+	 */
 	async startPollingShowInfo() {
 		if (this.pollingShowInfo !== undefined) clearInterval(this.pollingShowInfo)
 
@@ -169,25 +198,15 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
-	 * Get the timeline state from the API
+	 * Get the timeline state from the API and update local state.
+	 * @async
+	 * @returns {Promise<void>}
 	 */
 	getTimeLineState = async () => {
 		try {
 			const response = await fetch(`${this.baseUrl}/state`, { method: 'GET' })
 			let resultData = await response.json()
-			// console.log(resultData)
-			collectedData.value.timelines.forEach((timeline) => {
-				// check if the timeline is in local cache
-				let timelineIndex = this.playbackStatus.findIndex((t) => t.id === timeline.id)
-				if (timelineIndex > -1) {
-					// update the timeline
-					this.playbackStatus[timelineIndex] = timeline
-				} else {
-					// add the timeline
-					this.playbackStatus.push(timeline)
-				}
-			})
-			// this.playbackStatus = resultData
+			this.updateTimelinesFromArray(resultData.value.timelines)
 			let clockTime = resultData.clockTime
 			let date = new Date(clockTime) // create Date object
 			this.setVariableValues({
@@ -201,8 +220,10 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
-	 * Get the show info from the API
-	 **/
+	 * Get the show info from the API and update local state.
+	 * @async
+	 * @returns {Promise<void>}
+	 */
 	getShowInfo = () => {
 		return new Promise(async (resolve, reject) => {
 			try {
@@ -216,6 +237,13 @@ class ModuleInstance extends InstanceBase {
 					asset_manager: this.show.hosts.asset_manager,
 					show_name: resultData.showName,
 				})
+				const response2 = await fetch(`${this.baseUrl}/cue-group-state/by-name`, { method: 'GET' })
+				if (response2.ok) {
+					const resultData2 = await response2.json()
+					this.cueSets = resultData2
+				} else {
+					this.log('error', `API error: ${response2.statusText}`)
+				}
 				resolve()
 			} catch (e) {
 				this.log('error', `API ShowInfo Request failed (${e.message})`)
@@ -226,7 +254,10 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
-	 * When the module is destroyed
+	 * Called when the module is destroyed.
+	 * Cleans up parser and polling intervals.
+	 * @async
+	 * @returns {Promise<void>}
 	 */
 	async destroy() {
 		this.log('debug', 'destroy')
@@ -241,6 +272,13 @@ class ModuleInstance extends InstanceBase {
 		}
 	}
 
+	/**
+	 * Called when the module configuration is updated.
+	 * Resets connections and reloads show info.
+	 * @async
+	 * @param {*} config - The updated configuration object.
+	 * @returns {Promise<void>}
+	 */
 	async configUpdated(config) {
 		this.log('debug', JSON.stringify(config))
 		this.config = config
@@ -254,6 +292,7 @@ class ModuleInstance extends InstanceBase {
 		}
 		this.baseUrl = `http://${this.config.host}:3019/v0`
 		this.sseUrl = `http://${this.config.host}:3019/v1/sse`
+		console.log('configUpdated', this.baseUrl, this.sseUrl)
 		createVariableDefinitions(this)
 		this.getShowInfo()
 			.then(() => {
@@ -262,19 +301,22 @@ class ModuleInstance extends InstanceBase {
 				this.updatePresets()
 				this.updateFeedbacks()
 				// Now that we have the show info, we can start the SSE stream
-				this.readSSEStream(this.sseUrl).catch(console.error)
+				this.readSSEStream(this.sseUrl)
 				// Start polling the show info
 				this.startPollingShowInfo()
 				this.log('debug', 'Connected')
 				this.updateStatus(InstanceStatus.Ok, 'Connected')
 			})
 			.catch((e) => {
-				this.log('error', 'Error while getting showInfo')
+				this.log('error', 'Error while getting showInfo', e.message)
 				this.updateStatus(InstanceStatus.UnknownError, 'connection fails')
 			})
 	}
 
-	// Return config fields for web config
+	/**
+	 * Returns the configuration fields for the web config UI.
+	 * @returns {Array<Object>} Array of config field definitions.
+	 */
 	getConfigFields() {
 		return [
 			{
@@ -294,27 +336,32 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
-	 * Handle actions
+	 * Updates the action definitions for the module.
+	 * @returns {void}
 	 */
 	updateActions() {
 		this.setActionDefinitions(getActions(this))
 	}
 
 	/**
-	 * Handle presets
+	 * Updates the preset definitions for the module.
+	 * @returns {void}
 	 */
-
 	updatePresets() {
 		this.setPresetDefinitions(getPresets(this))
 	}
+
 	/**
-	 * Handle feedbacks
+	 * Updates the feedback definitions for the module.
+	 * @returns {void}
 	 */
 	updateFeedbacks() {
 		UpdateFeedbacks(this)
 	}
+
 	/**
-	 * Handle variables
+	 * Updates the variable definitions and values for the module.
+	 * @returns {void}
 	 */
 	updateVariables() {
 		setDynamicVariables(this)
