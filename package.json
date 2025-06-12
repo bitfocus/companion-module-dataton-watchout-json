@@ -12,11 +12,11 @@
 		"url": "git+https://github.com/bitfocus/companion-module-dataton-watchout-json.git"
 	},
 	"dependencies": {
-		"@companion-module/base": "~1.7.0",
+		"@companion-module/base": "~1.11.0",
 		"eventsource": "^4.0.0"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^1.5.0",
+		"@companion-module/tools": "^2.3.0",
 		"eslint": "^9.28.0",
 		"prettier": "^3.5.3"
 	},
