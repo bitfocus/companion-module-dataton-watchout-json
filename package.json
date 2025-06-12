@@ -16,7 +16,10 @@
 		"eventsource": "^4.0.0"
 	},
 	"devDependencies": {
-		"@companion-module/tools": "^1.5.0"
+		"@companion-module/tools": "^1.5.0",
+		"eslint": "^9.28.0",
+		"prettier": "^3.5.3"
 	},
-	"prettier": "@companion-module/tools/.prettierrc.json"
+	"prettier": "@companion-module/tools/.prettierrc.json",
+	"packageManager": "yarn@4.9.2"
 }
