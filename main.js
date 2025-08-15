@@ -1,10 +1,8 @@
 const { InstanceBase, Regex, runEntrypoint, InstanceStatus } = require('@companion-module/base')
 const UpgradeScripts = require('./upgrades.js')
-const {EventSource} = require('eventsource')
-console.log('EventSource loaded:', typeof EventSource)
+const { EventSource } = require('eventsource')
 const { getActions } = require('./actions')
 const { getPresets } = require('./presets')
-// Node.js v18+ includes fetch globally.
 const UpdateFeedbacks = require('./feedbacks.js')
 const { createVariableDefinitions, setDynamicVariables } = require('./variables.js')
 
@@ -15,29 +13,28 @@ const { createVariableDefinitions, setDynamicVariables } = require('./variables.
  * @extends InstanceBase
  */
 class ModuleInstance extends InstanceBase {
-	// Some basic objects and variables
-	show
-	snapshots
-	cueSets
-	baseUrl
-	parser
-	sseUrl
-	playbackStatus = []
-	mediaPresetsActive
-	CHOICES_TIMELINES
-	CHOICES_CUES
-	CHOICES_SNAPSHOTS
-	CHOICES_CUESETS
-	pollingShowInfo
-	connected = false
-	es = null
-
 	/**
 	 * @constructor
 	 * @param {*} internal - Internal instance object from Companion
 	 */
 	constructor(internal) {
 		super(internal)
+
+		// Initialize properties with default values
+		this.show = { timelines: {}, hosts: {} }
+		this.snapshots = { presets: {} }
+		this.cueSets = {}
+		this.baseUrl = ''
+		this.sseUrl = ''
+		this.playbackStatus = []
+		this.mediaPresetsActive = []
+		this.CHOICES_TIMELINES = []
+		this.CHOICES_CUES = []
+		this.CHOICES_SNAPSHOTS = []
+		this.CHOICES_CUESETS = []
+		this.pollingShowInfo = null
+		this.connected = false
+		this.es = null
 	}
 	/**
 	 * Main function to setup the SSE stream and this.parser.
@@ -47,17 +44,43 @@ class ModuleInstance extends InstanceBase {
 	 * @returns {Promise<void>}
 	 */
 	readSSEStream = (url) => {
-		console.log('readSSEStream', url)
+		this.log('debug', `Starting SSE stream: ${url}`)
+
+		// Close existing connection
 		if (this.es) {
 			this.es.close()
+			this.es = null
 		}
-		this.es = new EventSource(url)
-		console.log('EventSource created:', this.es)
-		this.es.onmessage = (event) => {
-			this.onParse({ type: 'event', data: event.data })
-		}
-		this.es.onerror = (err) => {
-			console.error('SSE error:', err)
+
+		try {
+			this.es = new EventSource(url)
+
+			this.es.onopen = () => {
+				this.log('debug', 'SSE connection opened')
+				this.connected = true
+				this.updateStatus(InstanceStatus.Ok, 'Connected via SSE')
+			}
+
+			this.es.onmessage = (event) => {
+				this.onParse({ type: 'event', data: event.data })
+			}
+
+			this.es.onerror = (err) => {
+				this.log('error', `SSE error: ${err.message || 'Connection failed'}`)
+				this.connected = false
+				this.updateStatus(InstanceStatus.ConnectionFailure, 'SSE Connection Lost')
+
+				// Attempt to reconnect after a delay
+				setTimeout(() => {
+					if (!this.connected && this.sseUrl) {
+						this.log('debug', 'Attempting SSE reconnection...')
+						this.readSSEStream(this.sseUrl)
+					}
+				}, 5000)
+			}
+		} catch (error) {
+			this.log('error', `Failed to create SSE connection: ${error.message}`)
+			this.updateStatus(InstanceStatus.UnknownError, 'SSE Setup Failed')
 		}
 	}
 
@@ -78,29 +101,33 @@ class ModuleInstance extends InstanceBase {
 	 */
 	async init(config) {
 		this.config = config
-		this.updateStatus(InstanceStatus.Ok, 'Initializing...')
-		if (this.config.host !== undefined && this.config.host !== '') {
-			this.baseUrl = `http://${this.config.host}:3019/v0`
-			this.sseUrl = `http://${this.config.host}:3019/v1/sse`
-			// Get base show info to load timelines
-			createVariableDefinitions(this) // export variable definitions
+		this.updateStatus(InstanceStatus.Connecting, 'Initializing...')
 
-			this.getShowInfo()
-				.then(() => {
-					this.updateActions()
-					this.updateVariables()
-					this.updatePresets()
-					this.updateFeedbacks()
-					// Now that we have the show info, we can start the SSE stream
-					this.readSSEStream(this.sseUrl)
-					// Start polling the show info
-					// this.startPollingShowInfo()
-					this.updateStatus(InstanceStatus.Ok, 'Connected')
-				})
-				.catch((e) => {
-					this.log('error', ` Error while getting showInfo, (${e.message})`)
-					this.updateStatus(InstanceStatus.UnknownError, 'connection fails')
-				})
+		if (!this.config.host || this.config.host.trim() === '') {
+			this.updateStatus(InstanceStatus.BadConfig, 'No host configured')
+			return
+		}
+
+		this.baseUrl = `http://${this.config.host}:3019/v0`
+		this.sseUrl = `http://${this.config.host}:3019/v1/sse`
+
+		// Get base show info to load timelines
+		createVariableDefinitions(this) // export variable definitions
+
+		try {
+			await this.getShowInfo()
+			this.updateActions()
+			this.updateVariables()
+			this.updatePresets()
+			this.updateFeedbacks()
+
+			// Now that we have the show info, we can start the SSE stream
+			this.readSSEStream(this.sseUrl)
+
+			this.updateStatus(InstanceStatus.Ok, 'Connected')
+		} catch (e) {
+			this.log('error', `Error while getting showInfo: ${e.message}`)
+			this.updateStatus(InstanceStatus.UnknownError, `Connection failed: ${e.message}`)
 		}
 	}
 
@@ -140,48 +167,63 @@ class ModuleInstance extends InstanceBase {
 	 * @param {*} event - The SSE event object.
 	 */
 	onParse = (event) => {
-		if (event.type === 'event') {
-			try {
-				const collectedData = JSON.parse(event.data)
-				// console.log('collectedData', collectedData)
-				switch (collectedData.kind) {
-					case 'playbackState':
-						// update heartbeat variable
-						let date = new Date(collectedData.value.clockTime) // create Date object
+		if (event.type !== 'event') {
+			return
+		}
+
+		try {
+			const collectedData = JSON.parse(event.data)
+
+			switch (collectedData.kind) {
+				case 'playbackState':
+					// update heartbeat variable
+					if (collectedData.value && collectedData.value.clockTime) {
+						const date = new Date(collectedData.value.clockTime)
 						this.setVariableValues({
 							heartbeat: date.toString(),
 						})
+					}
+
+					if (collectedData.value && collectedData.value.timelines) {
 						this.updateTimelinesFromArray(collectedData.value.timelines)
 						this.checkFeedbacks('timeLineState')
-						break
-					case 'reconnect-interval':
-						console.log('reconnect-interval: %s', collectedData)
-						break
-					case 'showRevision':
-						// console.log('Show Revision', collectedData.value.revision)
-						break
-					case 'inputs':
-						// console.log('Inputs', collectedData.value.inputs)
-						break
-					case 'cueVisibility':
-						// console.log('cueVisibility')
-						break
-					case 'mediaPresetsChange':
-						// console.log('mediaPresetsChange')
-						break
-					case 'mediaPresetsActive':
-						this.mediaPresetsActive = collectedData.value
-						console.log('mediaPresetsActive', this.mediaPresetsActive)
-						this.checkFeedbacks('mediaPresetActive')
-						break
+					}
+					break
 
-					default:
-						console.log('no case for: %s', collectedData.kind)
-						break
-				}
-			} catch (error) {
-				console.log(error)
+				case 'reconnect-interval':
+					this.log('debug', `Reconnect interval: ${JSON.stringify(collectedData)}`)
+					break
+
+				case 'showRevision':
+					this.log('debug', `Show revision: ${collectedData.value?.revision || 'unknown'}`)
+					break
+
+				case 'inputs':
+					this.log('debug', 'Inputs updated')
+					break
+
+				case 'cueVisibility':
+					this.log('debug', 'Cue visibility changed')
+					break
+
+				case 'mediaPresetsChange':
+					this.log('debug', 'Media presets changed')
+					break
+
+				case 'mediaPresetsActive':
+					if (collectedData.value) {
+						this.mediaPresetsActive = collectedData.value
+						this.log('debug', `Media presets active: ${JSON.stringify(this.mediaPresetsActive)}`)
+						this.checkFeedbacks('mediaPresetActive')
+					}
+					break
+
+				default:
+					this.log('debug', `Unhandled SSE event kind: ${collectedData.kind}`)
+					break
 			}
+		} catch (error) {
+			this.log('error', `Failed to parse SSE event: ${error.message}`)
 		}
 	}
 
@@ -224,52 +266,74 @@ class ModuleInstance extends InstanceBase {
 	 * @async
 	 * @returns {Promise<void>}
 	 */
-	getShowInfo = () => {
-		return new Promise(async (resolve, reject) => {
-			try {
-				const response = await fetch(`${this.baseUrl}/show`, { method: 'GET' })
-				let resultData = await response.json()
+	getShowInfo = async () => {
+		try {
+			const response = await fetch(`${this.baseUrl}/show`, { method: 'GET' })
 
-				this.show = resultData.show
-				this.snapshots = resultData.mediaPresets
-				this.setVariableValues({
-					director: this.show.hosts.director,
-					asset_manager: this.show.hosts.asset_manager,
-					show_name: resultData.showName,
-				})
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+			}
+
+			const resultData = await response.json()
+
+			// Validate response structure
+			if (!resultData.show || !resultData.show.timelines) {
+				throw new Error('Invalid response structure from show endpoint')
+			}
+
+			this.show = resultData.show
+			this.snapshots = resultData.mediaPresets || { presets: {} }
+
+			// Set variables safely
+			this.setVariableValues({
+				director: this.show.hosts?.director || 'Unknown',
+				asset_manager: this.show.hosts?.asset_manager || 'Unknown',
+				show_name: resultData.showName || 'Unknown',
+			})
+
+			// Get cue sets
+			try {
 				const response2 = await fetch(`${this.baseUrl}/cue-group-state/by-name`, { method: 'GET' })
 				if (response2.ok) {
 					const resultData2 = await response2.json()
-					this.cueSets = resultData2
+					this.cueSets = resultData2 || {}
 				} else {
-					this.log('error', `API error: ${response2.statusText}`)
+					this.log('warn', `Cue groups not available: ${response2.statusText}`)
+					this.cueSets = {}
 				}
-				resolve()
-			} catch (e) {
-				this.log('error', `API ShowInfo Request failed (${e.message})`)
-				this.updateStatus(InstanceStatus.UnknownError, e.code)
-				reject(e)
+			} catch (cueError) {
+				this.log('warn', `Failed to get cue groups: ${cueError.message}`)
+				this.cueSets = {}
 			}
-		})
+		} catch (e) {
+			this.log('error', `API ShowInfo Request failed: ${e.message}`)
+			this.updateStatus(InstanceStatus.UnknownError, `Show info failed: ${e.message}`)
+			throw e
+		}
 	}
 
 	/**
 	 * Called when the module is destroyed.
-	 * Cleans up parser and polling intervals.
+	 * Cleans up SSE connection and polling intervals.
 	 * @async
 	 * @returns {Promise<void>}
 	 */
 	async destroy() {
-		this.log('debug', 'destroy')
-		// stop the this.parser
-		if (this.parser) {
-			this.parser.reset()
-			this.parser = null
+		this.log('debug', 'Destroying module')
+
+		// Clean up SSE connection
+		if (this.es) {
+			this.es.close()
+			this.es = null
 		}
+
+		// Clean up polling interval
 		if (this.pollingShowInfo) {
 			clearInterval(this.pollingShowInfo)
-			this.pollingShowInfo = undefined
+			this.pollingShowInfo = null
 		}
+
+		this.connected = false
 	}
 
 	/**
@@ -280,37 +344,25 @@ class ModuleInstance extends InstanceBase {
 	 * @returns {Promise<void>}
 	 */
 	async configUpdated(config) {
-		this.log('debug', JSON.stringify(config))
+		this.log('debug', `Config updated: ${JSON.stringify(config)}`)
 		this.config = config
-		if (this.parser) {
-			this.parser.reset()
-			this.parser = null
+
+		// Clean up existing connections
+		if (this.es) {
+			this.es.close()
+			this.es = null
 		}
+
 		if (this.pollingShowInfo) {
 			clearInterval(this.pollingShowInfo)
-			this.pollingShowInfo = undefined
+			this.pollingShowInfo = null
 		}
-		this.baseUrl = `http://${this.config.host}:3019/v0`
-		this.sseUrl = `http://${this.config.host}:3019/v1/sse`
-		console.log('configUpdated', this.baseUrl, this.sseUrl)
-		createVariableDefinitions(this)
-		this.getShowInfo()
-			.then(() => {
-				this.updateActions()
-				this.updateVariables()
-				this.updatePresets()
-				this.updateFeedbacks()
-				// Now that we have the show info, we can start the SSE stream
-				this.readSSEStream(this.sseUrl)
-				// Start polling the show info
-				this.startPollingShowInfo()
-				this.log('debug', 'Connected')
-				this.updateStatus(InstanceStatus.Ok, 'Connected')
-			})
-			.catch((e) => {
-				this.log('error', 'Error while getting showInfo', e.message)
-				this.updateStatus(InstanceStatus.UnknownError, 'connection fails')
-			})
+
+		// Reset connection state
+		this.connected = false
+
+		// Re-initialize with new config
+		await this.init(config)
 	}
 
 	/**
