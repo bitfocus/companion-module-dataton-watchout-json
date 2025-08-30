@@ -124,6 +124,9 @@ class ModuleInstance extends InstanceBase {
 			// Now that we have the show info, we can start the SSE stream
 			this.readSSEStream(this.sseUrl)
 
+			// Start polling for show info updates (timeline structure changes)
+			this.startPollingShowInfo()
+
 			this.updateStatus(InstanceStatus.Ok, 'Connected')
 		} catch (e) {
 			this.log('error', `Error while getting showInfo: ${e.message}`)
@@ -234,9 +237,17 @@ class ModuleInstance extends InstanceBase {
 	async startPollingShowInfo() {
 		if (this.pollingShowInfo !== undefined) clearInterval(this.pollingShowInfo)
 
-		this.pollingShowInfo = setInterval(() => {
-			this.getShowInfo()
-		}, 5000)
+		this.pollingShowInfo = setInterval(async () => {
+			try {
+				await this.getShowInfo()
+				// Update UI elements when timeline structure changes
+				this.updateActions()
+				this.updateVariables()
+				this.updatePresets()
+			} catch (error) {
+				this.log('debug', `Polling show info failed: ${error.message}`)
+			}
+		}, 10000) // Poll every 10 seconds instead of 5 to reduce load
 	}
 
 	/**

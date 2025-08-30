@@ -1,8 +1,11 @@
 ## companion-module-dataton-watchout-json
 
-This module will connect to a Watchout 7 Director. Behind the scenes the playback status of all timelines is being fetched via Server-Sent Events (SSE) and used for feedback.
+This module will connect to a Watchout 7 Director. It uses two methods for staying synchronized:
 
-All timeline information including names/cues are being fetched when the module connects and when shows are loaded.
+* **Real-time updates**: Playback status (play/pause/stop) is received via Server-Sent Events (SSE) for instant feedback
+* **Structure updates**: Timeline information (names, cues, etc.) is polled every 10 seconds to detect show changes
+
+All timeline information including names/cues are being fetched when the module connects, when shows are loaded, and periodically to detect changes.
 
 Presets for timelines are built with feedback and also with variables for text. This means that when changing names of timelines your button will be updated.
 
