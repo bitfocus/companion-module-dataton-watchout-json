@@ -12,3 +12,4 @@ DEBUG-*
 # EXCEPT these
 !.yarn/releases/
 !.yarn/plugins/
+*.tgz

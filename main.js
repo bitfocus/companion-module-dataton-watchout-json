@@ -295,6 +295,12 @@ class ModuleInstance extends InstanceBase {
 			this.show = resultData.show
 			this.snapshots = resultData.mediaPresets || { presets: {} }
 
+			// // Log timeline data structure for debugging
+			// if (this.show.timelines) {
+			// 	this.log('info', 'Timeline data received from Watchout:')
+			// 	this.log('info', JSON.stringify(this.show.timelines, null, 2))
+			// }
+
 			// Set variables safely
 			this.setVariableValues({
 				director: this.show.hosts?.director || 'Unknown',
@@ -394,8 +400,40 @@ class ModuleInstance extends InstanceBase {
 				id: 'sortTimelines',
 				label: 'Sort timelines on name',
 				width: 8,
+				default: false,
 			},
 		]
+	}
+
+	/**
+	 * Get sorted timelines based on configuration
+	 * @returns {Array} Array of timeline objects with id and name properties
+	 */
+	getSortedTimelines() {
+		const timelines = []
+		
+		// Collect all timelines
+		if (this.show && this.show.timelines && typeof this.show.timelines === 'object') {
+			for (const key in this.show.timelines) {
+				if (Object.hasOwnProperty.call(this.show.timelines, key)) {
+					const timeline = this.show.timelines[key]
+					if (timeline && timeline.name) {
+						timelines.push({ id: key, name: timeline.name, data: timeline })
+					}
+				}
+			}
+		}
+		
+		// Sort based on configuration
+		if (this.config.sortTimelines) {
+			// Sort by name when config enabled
+			timelines.sort((a, b) => a.name.localeCompare(b.name))
+		} else {
+			// Default: Sort by ID to preserve Watchout's order
+			timelines.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
+		}
+		
+		return timelines
 	}
 
 	/**

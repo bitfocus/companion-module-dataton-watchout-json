@@ -22,39 +22,34 @@ const getActions = (instance) => {
 		}
 	}
 
-	// Populate timelines and cues safely
-	if (instance.show && instance.show.timelines && typeof instance.show.timelines === 'object') {
-		for (const key1 in instance.show.timelines) {
-			if (Object.hasOwnProperty.call(instance.show.timelines, key1)) {
-				const element = instance.show.timelines[key1]
-				if (element && element.name) {
-					instance.CHOICES_TIMELINES.push({ id: key1, label: element.name })
+	// Populate timelines and cues safely using sorted order
+	const sortedTimelines = instance.getSortedTimelines()
+	instance.log('info', `Processing ${sortedTimelines.length} timelines from Watchout`)
+	
+	for (const timeline of sortedTimelines) {
+		instance.CHOICES_TIMELINES.push({ id: timeline.id, label: timeline.name })
+		// instance.log('debug', `Timeline: ID=${timeline.id}, Name="${timeline.name}"`)
 
-					// Process cues if they exist
-					if (element.cues && !instance.isObjEmpty(element.cues)) {
-						for (const key2 in element.cues) {
-							if (Object.hasOwnProperty.call(element.cues, key2)) {
-								const cue = element.cues[key2]
-								if (cue) {
-									instance.CHOICES_CUES.push({
-										id: `${key1}/${key2}`,
-										label: `${element.name}: ${cue.state || 'unknown'} ${cue.name || 'no_name'} at ${cue.start || 0}ms`,
-									})
-								}
-							}
-						}
+		// Process cues if they exist
+		if (timeline.data.cues && !instance.isObjEmpty(timeline.data.cues)) {
+			for (const key2 in timeline.data.cues) {
+				if (Object.hasOwnProperty.call(timeline.data.cues, key2)) {
+					const cue = timeline.data.cues[key2]
+					if (cue) {
+						instance.CHOICES_CUES.push({
+							id: `${timeline.id}/${key2}`,
+							label: `${timeline.name}: ${cue.state || 'unknown'} ${cue.name || 'no_name'} at ${cue.start || 0}ms`,
+						})
 					}
 				}
 			}
 		}
 	}
 
-	// Sort timelines if configured
-	if (instance.config.sortTimelines) {
-		instance.CHOICES_TIMELINES.sort((a, b) => a.label.localeCompare(b.label))
-	} else {
-		instance.CHOICES_TIMELINES.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
-	}
+	// Log the sorting method and final order
+	const sortMethod = instance.config.sortTimelines ? 'name (alphabetical)' : 'ID (Watchout order)'
+	instance.log('info', `Timelines sorted by ${sortMethod}`)
+	// instance.log('info', 'Final timeline order: ' + instance.CHOICES_TIMELINES.map(t => `${t.id}:"${t.label}"`).join(', '))
 
 	/**
 	 * Timeline Action: Play, Pause, or Stop a timeline.
