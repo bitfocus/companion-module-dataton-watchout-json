@@ -402,6 +402,17 @@ class ModuleInstance extends InstanceBase {
 				width: 8,
 				default: false,
 			},
+			{
+				type: 'dropdown',
+				id: 'defaultToggleBehavior',
+				label: 'Default toggle behavior',
+				width: 8,
+				default: 'play',
+				choices: [
+					{ id: 'play', label: 'Play (default when timeline is stopped)' },
+					{ id: 'pause', label: 'Pause (default when timeline is stopped)' },
+				],
+			},
 		]
 	}
 

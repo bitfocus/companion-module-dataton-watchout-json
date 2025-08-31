@@ -109,12 +109,14 @@ const getActions = (instance) => {
 		 * @param {Object} action - The action object with options.
 		 */
 		callback: async (action) => {
-			let actionToSend = 'play' // Default action
+			let actionToSend = instance.config.defaultToggleBehavior || 'play' // Default action
 
 			// Find the timeline and determine the correct toggle action
 			const timeline = instance.playbackStatus.find((tl) => tl.id === action.options.timeline)
 			if (timeline && timeline.playbackStatus === 'run') {
 				actionToSend = 'pause'
+			} else if (timeline && timeline.playbackStatus === 'pause') {
+				actionToSend = 'play'
 			}
 
 			instance.log('debug', `API send: ${instance.baseUrl}/${actionToSend}/${action.options.timeline}`)
