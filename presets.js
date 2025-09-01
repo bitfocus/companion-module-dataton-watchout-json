@@ -11,33 +11,6 @@ const getPresets = (instance) => {
 	const presets = {}
 
 	/**
-	 * Preset: Update timeline info
-	 */
-	presets[`show_info`] = {
-		type: 'button',
-		category: 'Basic',
-		name: `Update timeline info`,
-		style: {
-			text: `Update Timelines`,
-			size: 'auto',
-			color: combineRgb(255, 255, 255),
-			bgcolor: combineRgb(0, 0, 0),
-		},
-		steps: [
-			{
-				down: [
-					{
-						actionId: 'show_information',
-						options: {},
-					},
-				],
-				up: [],
-			},
-		],
-		feedbacks: [],
-	}
-
-	/**
 	 * Preset: Jump to Cue
 	 */
 	presets[`jump_to_cue`] = {
@@ -525,33 +498,6 @@ const getPresets = (instance) => {
 				down: [
 					{
 						actionId: 'reset_all_cue_groups_by_name',
-						options: {},
-					},
-				],
-				up: [],
-			},
-		],
-		feedbacks: [],
-	}
-
-	/**
-	 * Preset: Clear all active snapshots
-	 */
-	presets[`snapshot_clear`] = {
-		type: 'button',
-		category: 'Media Presets',
-		name: `Clear snapshots`,
-		style: {
-			text: `Clear all active snapshots`,
-			size: '14px',
-			color: combineRgb(255, 255, 255),
-			bgcolor: combineRgb(0, 0, 0),
-		},
-		steps: [
-			{
-				down: [
-					{
-						actionId: 'snapshot_clear',
 						options: {},
 					},
 				],
