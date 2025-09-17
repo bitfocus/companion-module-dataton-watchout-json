@@ -504,7 +504,7 @@ const getActions = (instance) => {
 				tooltip: 'The name/key of the input variable in the show',
 			},
 			{
-				type: 'number',
+				type: 'textinput',
 				useVariables: true,
 				label: 'Input Value',
 				id: 'input_value',
