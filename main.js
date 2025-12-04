@@ -94,6 +94,29 @@ class ModuleInstance extends InstanceBase {
 	}
 
 	/**
+	 * Fast conversion of milliseconds to time format (hh:mm:ss or mm:ss)
+	 * @param {number} ms - Milliseconds to convert
+	 * @returns {string} Formatted time string
+	 */
+	msToTime(ms) {
+		const isNegative = ms < 0
+		const absMs = Math.abs(ms)
+		const totalSeconds = Math.floor(absMs / 1000)
+		const hours = Math.floor(totalSeconds / 3600)
+		const minutes = Math.floor((totalSeconds % 3600) / 60)
+		const seconds = totalSeconds % 60
+
+		let timeStr
+		if (hours > 0) {
+			timeStr = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+		} else {
+			timeStr = `${minutes}:${seconds.toString().padStart(2, '0')}`
+		}
+
+		return isNegative ? `-${timeStr}` : timeStr
+	}
+
+	/**
 	 * Initialization of the module.
 	 * Sets up API URLs, loads show info, and starts SSE and polling.
 	 * @param {*} config - Module configuration object.
@@ -109,7 +132,7 @@ class ModuleInstance extends InstanceBase {
 		}
 
 		this.baseUrl = `http://${this.config.host}:3019/v0`
-		this.sseUrl = `http://${this.config.host}:3019/v1/sse`
+		this.sseUrl = `http://${this.config.host}:3019/v2/sse`
 
 		// Get base show info to load timelines
 		createVariableDefinitions(this) // export variable definitions
@@ -176,8 +199,18 @@ class ModuleInstance extends InstanceBase {
 
 		try {
 			const collectedData = JSON.parse(event.data)
-
 			switch (collectedData.kind) {
+				case 'timelineCountdowns':
+					// console.log('timelineCountdowns event received', JSON.stringify(collectedData.value))
+					// [{"timelineId":"12","timelineName":"DEMO Vibes","cueId":"5","cueName":null,"delta":-16475,"status":"pre"}]
+					if (collectedData.value && collectedData.value.length > 0) {
+						const countdown = collectedData.value[0]
+						this.setVariableValues({
+							[`timeline_${countdown.timelineId}_cue_${countdown.cueId}`]: this.msToTime(countdown.delta),
+						})
+					}
+					break				
+				
 				case 'playbackState':
 					// update heartbeat variable
 					if (collectedData.value && collectedData.value.clockTime) {
@@ -291,7 +324,7 @@ class ModuleInstance extends InstanceBase {
 			if (!resultData.show || !resultData.show.timelines) {
 				throw new Error('Invalid response structure from show endpoint')
 			}
-
+			// console.log('Show info received:', JSON.stringify(resultData))
 			this.show = resultData.show
 			this.snapshots = resultData.mediaPresets || { presets: {} }
 
