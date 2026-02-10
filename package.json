@@ -1,6 +1,6 @@
 {
 	"name": "dataton-watchout-json",
-	"version": "2.6.0",
+	"version": "2.6.0-tony",
 	"main": "main.js",
 	"scripts": {
 		"format": "prettier -w .",
