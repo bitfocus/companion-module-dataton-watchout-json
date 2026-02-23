@@ -209,8 +209,8 @@ class ModuleInstance extends InstanceBase {
 							[`timeline_${countdown.timelineId}_cue_${countdown.cueId}`]: this.msToTime(countdown.delta),
 						})
 					}
-					break				
-				
+					break
+
 				case 'playbackState':
 					// update heartbeat variable
 					if (collectedData.value && collectedData.value.clockTime) {
@@ -422,6 +422,13 @@ class ModuleInstance extends InstanceBase {
 	getConfigFields() {
 		return [
 			{
+				type: 'static-text',
+				id: 'info',
+				width: 12,
+				label: 'Input Variables',
+				value: 'To use the Send Input actions, you must set the Key field in the variable properties in Watchout Producer.',
+			},
+			{
 				type: 'textinput',
 				id: 'host',
 				label: 'Director IP',
@@ -455,7 +462,7 @@ class ModuleInstance extends InstanceBase {
 	 */
 	getSortedTimelines() {
 		const timelines = []
-		
+
 		// Collect all timelines
 		if (this.show && this.show.timelines && typeof this.show.timelines === 'object') {
 			for (const key in this.show.timelines) {
@@ -467,7 +474,7 @@ class ModuleInstance extends InstanceBase {
 				}
 			}
 		}
-		
+
 		// Sort based on configuration
 		if (this.config.sortTimelines) {
 			// Sort by name when config enabled
@@ -476,7 +483,7 @@ class ModuleInstance extends InstanceBase {
 			// Default: Sort by ID to preserve Watchout's order
 			timelines.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }))
 		}
-		
+
 		return timelines
 	}
 

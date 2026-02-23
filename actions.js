@@ -25,7 +25,7 @@ const getActions = (instance) => {
 	// Populate timelines and cues safely using sorted order
 	const sortedTimelines = instance.getSortedTimelines()
 	instance.log('info', `Processing ${sortedTimelines.length} timelines from Watchout`)
-	
+
 	for (const timeline of sortedTimelines) {
 		instance.CHOICES_TIMELINES.push({ id: timeline.id, label: timeline.name })
 		// instance.log('debug', `Timeline: ID=${timeline.id}, Name="${timeline.name}"`)
@@ -501,7 +501,7 @@ const getActions = (instance) => {
 				label: 'Input Key',
 				id: 'input_key',
 				default: '',
-				tooltip: 'The name/key of the input variable in the show',
+				tooltip: 'The key of the input variable. You must manually set the Key field in the variable properties in Watchout Producer for this to work.',
 			},
 			{
 				type: 'textinput',
@@ -513,6 +513,16 @@ const getActions = (instance) => {
 				max: 999999,
 				step: 0.01,
 				tooltip: 'The value to send to the input variable',
+			},
+			{
+				type: 'number',
+				label: 'Duration (ms)',
+				id: 'duration',
+				default: 0,
+				min: 0,
+				max: 60000,
+				step: 100,
+				tooltip: 'Interpolation duration in milliseconds. 0 = instant change.',
 			},
 		],
 		/**
@@ -528,7 +538,18 @@ const getActions = (instance) => {
 				return
 			}
 
-			const payload = [{ key: inputKey.trim(), value: parseFloat(inputValue) || 0 }]
+			let value = parseFloat(inputValue)
+			if (isNaN(value)) {
+				value = inputValue
+			}
+
+			const inputObj = { key: inputKey.trim(), value: value }
+			const duration = parseInt(action.options.duration) || 0
+			if (duration > 0) {
+				inputObj.duration = duration
+			}
+
+			const payload = [inputObj]
 
 			instance.log('debug', `API send inputs: ${JSON.stringify(payload)}`)
 			try {
@@ -558,8 +579,8 @@ const getActions = (instance) => {
 				useVariables: true,
 				label: 'JSON Input Data',
 				id: 'inputs_json',
-				default: '[{"key": "InputName", "value": 0.5}]',
-				tooltip: 'JSON array of input objects with key and value properties',
+				default: '[{"key": "InputName", "value": 0.5, "duration": 1000}]',
+				tooltip: 'JSON array of input objects with key, value, and optional duration (ms) properties. You must manually set the Key field in the variable properties in Watchout Producer for this to work.',
 			},
 		],
 		/**
