@@ -33,6 +33,8 @@ class ModuleInstance extends InstanceBase {
 		this.CHOICES_SNAPSHOTS = []
 		this.CHOICES_CUESETS = []
 		this.pollingShowInfo = null
+		this.apiReachable = false
+		this.initRequestId = 0
 		this.connected = false
 		this.es = null
 	}
@@ -53,30 +55,50 @@ class ModuleInstance extends InstanceBase {
 		}
 
 		try {
-			this.es = new EventSource(url)
+			const eventSource = new EventSource(url)
+			this.es = eventSource
 
-			this.es.onopen = () => {
+			eventSource.onopen = () => {
+				if (this.es !== eventSource) return
+
 				this.log('debug', 'SSE connection opened')
 				this.connected = true
 				this.updateStatus(InstanceStatus.Ok, 'Connected via SSE')
 			}
 
-			this.es.onmessage = (event) => {
+			eventSource.onmessage = (event) => {
+				if (this.es !== eventSource) return
 				this.onParse({ type: 'event', data: event.data })
 			}
 
-			this.es.onerror = (err) => {
-				this.log('error', `SSE error: ${err.message || 'Connection failed'}`)
-				this.connected = false
-				this.updateStatus(InstanceStatus.ConnectionFailure, 'SSE Connection Lost')
+			eventSource.onerror = (err) => {
+				if (this.es !== eventSource) return
 
-				// Attempt to reconnect after a delay
-				setTimeout(() => {
-					if (!this.connected && this.sseUrl) {
-						this.log('debug', 'Attempting SSE reconnection...')
-						this.readSSEStream(this.sseUrl)
+				const message = err.message || 'Connection failed'
+				const readyState = eventSource.readyState
+				const wasConnected = this.connected
+
+				this.connected = false
+
+				if (readyState === EventSource.CONNECTING) {
+					this.log(wasConnected ? 'warn' : 'debug', `SSE reconnecting: ${message}`)
+
+					if (this.apiReachable) {
+						this.updateStatus(InstanceStatus.Ok, 'Connected (SSE reconnecting)')
+					} else {
+						this.updateStatus(InstanceStatus.Connecting, 'SSE reconnecting...')
 					}
-				}, 5000)
+					return
+				}
+
+				this.log('error', `SSE error: ${message}`)
+				this.es = null
+
+				if (this.apiReachable) {
+					this.updateStatus(InstanceStatus.Ok, 'Connected (polling only)')
+				} else {
+					this.updateStatus(InstanceStatus.ConnectionFailure, 'SSE connection closed')
+				}
 			}
 		} catch (error) {
 			this.log('error', `Failed to create SSE connection: ${error.message}`)
@@ -123,6 +145,8 @@ class ModuleInstance extends InstanceBase {
 	 * @returns {Promise<void>}
 	 */
 	async init(config) {
+		const initRequestId = ++this.initRequestId
+
 		this.config = config
 		this.updateStatus(InstanceStatus.Connecting, 'Initializing...')
 
@@ -137,24 +161,37 @@ class ModuleInstance extends InstanceBase {
 		// Get base show info to load timelines
 		createVariableDefinitions(this) // export variable definitions
 
-		try {
-			await this.getShowInfo()
-			this.updateActions()
-			this.updateVariables()
-			this.updatePresets()
-			this.updateFeedbacks()
+		this.updateStatus(InstanceStatus.Connecting, 'Ready to connect...')
 
-			// Now that we have the show info, we can start the SSE stream
-			this.readSSEStream(this.sseUrl)
+		this.getShowInfo()
+			.then(() => {
+				if (this.initRequestId !== initRequestId) {
+					this.log('debug', 'Discarding stale initialization result')
+					return
+				}
 
-			// Start polling for show info updates (timeline structure changes)
-			this.startPollingShowInfo()
+				this.log('debug', 'Show info loaded successfully')
+				this.updateActions()
+				this.updateVariables()
+				this.updatePresets()
+				this.updateFeedbacks()
 
-			this.updateStatus(InstanceStatus.Ok, 'Connected')
-		} catch (e) {
-			this.log('error', `Error while getting showInfo: ${e.message}`)
-			this.updateStatus(InstanceStatus.UnknownError, `Connection failed: ${e.message}`)
-		}
+				// Now that we have the show info, we can start the SSE stream
+				this.readSSEStream(this.sseUrl)
+
+				// Start polling for show info updates (timeline structure changes)
+				this.startPollingShowInfo()
+				this.updateStatus(InstanceStatus.Ok, 'Connected')
+			})
+			.catch((e) => {
+				if (this.initRequestId !== initRequestId) {
+					this.log('debug', `Ignoring stale initialization error: ${e.message}`)
+					return
+				}
+
+				this.log('error', `Error while getting showInfo: ${e.message}`)
+				this.updateStatus(InstanceStatus.UnknownError, `Connection failed: ${e.message}`)
+			})
 	}
 
 	/**
@@ -273,6 +310,12 @@ class ModuleInstance extends InstanceBase {
 		this.pollingShowInfo = setInterval(async () => {
 			try {
 				await this.getShowInfo()
+
+				if (!this.connected && !this.es && this.sseUrl) {
+					this.log('debug', 'Retrying SSE connection after successful API poll')
+					this.readSSEStream(this.sseUrl)
+				}
+
 				// Update UI elements when timeline structure changes
 				this.updateActions()
 				this.updateVariables()
@@ -319,6 +362,7 @@ class ModuleInstance extends InstanceBase {
 			}
 
 			const resultData = await response.json()
+			this.apiReachable = true
 
 			// Validate response structure
 			if (!resultData.show || !resultData.show.timelines) {
@@ -356,6 +400,7 @@ class ModuleInstance extends InstanceBase {
 				this.cueSets = {}
 			}
 		} catch (e) {
+			this.apiReachable = false
 			this.log('error', `API ShowInfo Request failed: ${e.message}`)
 			this.updateStatus(InstanceStatus.UnknownError, `Show info failed: ${e.message}`)
 			throw e
@@ -370,6 +415,7 @@ class ModuleInstance extends InstanceBase {
 	 */
 	async destroy() {
 		this.log('debug', 'Destroying module')
+		this.initRequestId++
 
 		// Clean up SSE connection
 		if (this.es) {
@@ -395,6 +441,7 @@ class ModuleInstance extends InstanceBase {
 	 */
 	async configUpdated(config) {
 		this.log('debug', `Config updated: ${JSON.stringify(config)}`)
+		this.initRequestId++
 		this.config = config
 
 		// Clean up existing connections
@@ -426,7 +473,8 @@ class ModuleInstance extends InstanceBase {
 				id: 'info',
 				width: 12,
 				label: 'Input Variables',
-				value: 'To use the Send Input actions, you must set the Key field in the variable properties in Watchout Producer.',
+				value:
+					'To use the Send Input actions, you must set the Key field in the variable properties in Watchout Producer.',
 			},
 			{
 				type: 'textinput',
